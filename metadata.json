@@ -1,0 +1,6 @@
+{
+  "name": "TFC Garden — Hotel, Bamboo Sanctuary & Banquet Suite",
+  "description": "Official hospitality and booking suite for TFC Garden (Near Bus Stand, Sri Anandpur Sahib, Punjab) featuring Eco Bamboo Huts, AC Suites, Interactive Wedding Menu Cards, Restaurant Table Reservations, and Free 3 km Home Delivery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

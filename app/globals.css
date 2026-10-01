@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@layer base {
+  .font-serif {
+    font-family: var(--font-serif), Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+  .font-sans {
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  }
+  .font-mono {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+  }
+}
