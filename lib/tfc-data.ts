@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: ResortSettings = {
   name: 'TFC GARDEN',
   address: 'Near Bus Stand, Sri Anandpur Sahib, Punjab',
   whatsapp: '7379097909',
-  landline: '7379097909',
+  landline: '01887260810',
   email: 'tfcgardenresorts@gamil.com',
   upiId: '7789060606@ptyes',
   userName: 'Manjeet Singh',
@@ -43,7 +43,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'AC ROOMS & SUITES',
     description:
       'Plush king bedding, warm cove ceiling illumination, and dual-zone split AC comfort.',
-    image: '/images/luxury_ac_bedroom.jpg',
+    image: '/images/luxury_ac_bedroom.jpg?v=3',
     targetSection: '#rooms-section',
   },
   {
@@ -53,7 +53,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'BANQUET & WEDDING HALLS',
     description:
       'Ornate chandelier hall with bespoke floral stage backdrop and dressed celebration seating.',
-    image: '/images/wedding_stage_decor.jpg',
+    image: '/images/wedding_stage_decor.jpg?v=3',
     targetSection: '#wedding-card-section',
   },
   {
@@ -63,7 +63,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'RESTAURANT & DINING',
     description:
       'Warm timber dining tables, ambient pendant lighting, and multi-cuisine family hospitality.',
-    image: '/images/restaurant_vip_dining.jpg',
+    image: '/images/restaurant_vip_dining.jpg?v=3',
     targetSection: '#restaurant-section',
   },
   {
@@ -73,7 +73,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'BAMBOO HUTS',
     description:
       'Authentic woven bamboo cottages nestled along manicured garden walkways with lantern lighting.',
-    image: '/images/bamboo_hut_night.jpg',
+    image: '/images/bamboo_hut_night.jpg?v=3',
     targetSection: '#bamboo-sanctuary-section',
   },
   {
@@ -83,7 +83,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'GARDEN & FUN ZONE',
     description:
       'Expansive green celebration lawn and dedicated family recreation and kids fun zone.',
-    image: '/images/garden_fun_zone.jpg',
+    image: '/images/garden_fun_zone.jpg?v=3',
     targetSection: '#packages-section',
   },
   {
@@ -93,7 +93,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'AC ROOMS & SUITES',
     description:
       'Spacious architectural suite with designer furnishings and panoramic sanctuary views.',
-    image: '/images/luxury_ac_bedroom.jpg',
+    image: '/images/luxury_ac_bedroom.jpg?v=3',
     targetSection: '#rooms-section',
   },
   {
@@ -102,8 +102,8 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     category: 'Bamboo Huts',
     badgeText: 'BAMBOO HUTS',
     description:
-      'Soaring sustainable Guadua bamboo arches with configurable AC and natural breeze modes.',
-    image: '/images/bamboo_room_interior.jpg',
+      'Soaring sustainable Guadua bamboo arches with whisper-quiet Eco-AC climate comfort.',
+    image: '/images/bamboo_room_interior.jpg?v=3',
     targetSection: '#bamboo-sanctuary-section',
   },
   {
@@ -113,7 +113,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'BANQUET & WEDDING HALLS',
     description:
       'Vaulted destination wedding hall for up to 700 guests with royal catering complex.',
-    image: '/images/wedding_banquet_hall.jpg',
+    image: '/images/wedding_banquet_hall.jpg?v=3',
     targetSection: '#wedding-card-section',
   },
   {
@@ -123,7 +123,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'GARDEN & FUN ZONE',
     description:
       'Signature TFC Garden architectural arrival courtyard framed by tropical greenery.',
-    image: '/images/bamboo_hut_night.jpg',
+    image: '/images/bamboo_hut_night.jpg?v=3',
     targetSection: '#bamboo-sanctuary-section',
   },
   {
@@ -133,7 +133,7 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
     badgeText: 'AC ROOMS & SUITES',
     description:
       'Two-bedroom family suite with private lounge area and direct garden fun-zone access.',
-    image: '/images/luxury_ac_bedroom.jpg',
+    image: '/images/family_ac_suite_room.jpg?v=3',
     targetSection: '#rooms-section',
   },
 ];
@@ -267,14 +267,14 @@ export const ROOM_TYPES: RoomType[] = [
     viewText: 'Private Bamboo Grove & Garden View',
     pricePerNight: 3999,
     description:
-      'Signature handcrafted eco-friendly Bamboo Room featuring woven Guadua bamboo interiors, warm lantern lighting, and configurable AC or natural garden breeze.',
+      'Signature handcrafted eco-friendly Bamboo Room featuring woven Guadua bamboo interiors, warm lantern lighting, and whisper-quiet Eco-AC comfort.',
     maxGuests: 2,
-    climateText: 'AC / Non-AC Configurable',
+    climateText: 'AC Eco-Cooling',
     sqft: 540,
-    image: '/images/bamboo_room_interior.jpg',
+    image: '/images/bamboo_room_interior.jpg?v=3',
     isBambooSanctuary: true,
     facilities: [
-      'Selectable Eco-AC or Natural Breeze',
+      'Whisper-Quiet Eco-AC Cooling',
       'King Organic Mattress',
       'Private Bamboo Sit-Out Veranda',
       'Rain Shower & Brass Fixtures',
@@ -293,15 +293,15 @@ export const ROOM_TYPES: RoomType[] = [
     viewText: 'Lush Botanical Garden Walkway View',
     pricePerNight: 3999,
     description:
-      'Charming standalone Garden Hut Room (Heart Hut) nestled along TFC Hotel’s manicured green lawn walkway—crafted for peaceful, nature-immersed stays.',
+      'Charming standalone Garden Hut Room (Heart Hut) nestled along TFC Hotel’s manicured green lawn walkway—crafted for peaceful, air-conditioned nature stays.',
     maxGuests: 2,
-    climateText: 'AC / Non-AC Configurable',
+    climateText: 'AC Eco-Cooling',
     sqft: 620,
-    image: '/images/bamboo_hut_night.jpg',
+    image: '/images/bamboo_hut_night.jpg?v=3',
     isBambooSanctuary: true,
     facilities: [
       'Standalone Conical Thatched Hut',
-      'AC & Natural Cross-Ventilation',
+      'Full Split AC Climate Control',
       'Romantic Private Garden Sit-Out',
       'Plush King Canopy Bed',
       '24/7 Room & Dining Service',
@@ -321,7 +321,7 @@ export const ROOM_TYPES: RoomType[] = [
     maxGuests: 2,
     climateText: 'AC',
     sqft: 440,
-    image: '/images/luxury_ac_bedroom.jpg',
+    image: '/images/luxury_ac_bedroom.jpg?v=3',
     isBambooSanctuary: false,
     facilities: [
       'Plush King Bed with Quilted Headboard',
@@ -345,7 +345,7 @@ export const ROOM_TYPES: RoomType[] = [
     maxGuests: 5,
     climateText: 'AC',
     sqft: 820,
-    image: '/images/luxury_ac_bedroom.jpg',
+    image: '/images/family_ac_suite_room.jpg?v=3',
     isBambooSanctuary: false,
     facilities: [
       'Spacious Double King Beds for 5',
@@ -379,24 +379,6 @@ export const EVENT_PRESETS: EventPreset[] = [
     image: '/images/restaurant_vip_dining.jpg',
   },
   {
-    id: 'birthday',
-    title: 'Birthday Party Booking',
-    guestsText: 'Up to 120 Guests',
-    defaultGuests: 120,
-    defaultTimeSlot: 'Afternoon / Evening Celebration',
-    defaultZone: 'Garden Lawn & Celebration Hall',
-    image: '/images/garden_fun_zone.jpg',
-  },
-  {
-    id: 'arrange-marriage',
-    title: 'Arrange Marriage Booking',
-    guestsText: 'Up to 400 Guests',
-    defaultGuests: 400,
-    defaultTimeSlot: 'Full Day Ceremony (09:00 AM - 06:00 PM)',
-    defaultZone: 'Combined AC Hall & Garden Lawn',
-    image: '/images/wedding_stage_decor.jpg',
-  },
-  {
     id: 'wedding',
     title: 'Wedding Booking',
     guestsText: 'Up to 500 Guests',
@@ -404,15 +386,6 @@ export const EVENT_PRESETS: EventPreset[] = [
     defaultTimeSlot: 'Full Day Grand Wedding (09:00 AM - 11:30 PM)',
     defaultZone: 'Combined AC Hall & Garden Lawn',
     image: '/images/wedding_banquet_hall.jpg',
-  },
-  {
-    id: 'ring-ceremony',
-    title: 'Ring Ceremony Booking',
-    guestsText: 'Up to 200 Guests',
-    defaultGuests: 200,
-    defaultTimeSlot: 'Morning / Evening Ring Ceremony',
-    defaultZone: 'Grand AC Reception Stage Hall',
-    image: '/images/wedding_stage_decor.jpg',
   },
 ];
 
@@ -1374,14 +1347,14 @@ export const RESORT_PACKAGES: ResortPackage[] = [
     description:
       'Complete Bamboo Stay Package at ₹16,000 rent including handcrafted Bamboo Room accommodation, Morning Coffee, Breakfast, Lunch, and Dinner.',
     inclusions: [
-      'Bamboo Room / Bamboo Hut Stay (AC / Non-AC Configurable)',
+      'Bamboo Room / Bamboo Hut Stay (Full AC Eco-Cooling)',
       'Morning Coffee Included',
       'Fresh Breakfast Included',
       'Full Lunch Included',
       'Special Dinner Included',
     ],
     ctaText: 'Book Bamboo Stay Package',
-    image: '/images/bamboo_hut_night.jpg',
+    image: '/images/bamboo_hut_night.jpg?v=3',
   },
   {
     id: 'pkg-dining',

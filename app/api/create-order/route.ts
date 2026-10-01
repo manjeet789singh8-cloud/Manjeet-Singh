@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
     if (!keyId || !keySecret) {
       return NextResponse.json(
-        { error: 'Razorpay credentials are not configured on the server.' },
+        { error: 'Razorpay authentication credentials are not configured.' },
         { status: 401 }
       );
     }
@@ -17,15 +17,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const amount = Number(body.amount);
     const currency = body.currency || 'INR';
-    const receipt = body.receipt || `rcpt_${Date.now()}`;
+    const receipt =
+      body.receipt || `rcpt_tfc_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
     // Validate minimum amount >= 100 paise (₹1.00)
     if (!Number.isFinite(amount) || amount < 100) {
       return NextResponse.json(
-        {
-          error:
-            'Invalid amount. Minimum order amount must be at least 100 paise (₹1).',
-        },
+        { error: 'Invalid amount. Minimum order amount is 100 paise (₹1).' },
         { status: 400 }
       );
     }
@@ -39,32 +37,21 @@ export async function POST(req: NextRequest) {
       amount: Math.round(amount),
       currency,
       receipt,
-      notes: body.notes || {},
     });
 
     return NextResponse.json({
       order_id: order.id,
       amount: order.amount,
       currency: order.currency,
-      key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || keyId,
     });
   } catch (err: unknown) {
-    const errorObj = err as {
-      statusCode?: number;
-      error?: { description?: string; code?: string };
-      message?: string;
-    };
-
-    if (
-      errorObj?.statusCode === 401 ||
-      errorObj?.error?.code === 'BAD_REQUEST_ERROR' &&
-        errorObj?.error?.description?.toLowerCase().includes('authentication')
-    ) {
+    const errorObj = err as { statusCode?: number; error?: { description?: string }; message?: string };
+    if (errorObj?.statusCode === 401) {
       return NextResponse.json(
         {
           error:
             errorObj?.error?.description ||
-            'Razorpay authentication failed. Check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.',
+            'Razorpay authentication failed (401). Please verify API keys.',
         },
         { status: 401 }
       );

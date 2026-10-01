@@ -121,7 +121,7 @@ export default function WeddingMenuCardSection({
   };
 
   const selectedPreset =
-    EVENT_PRESETS.find((p) => p.id === selectedPresetId) || EVENT_PRESETS[3];
+    EVENT_PRESETS.find((p) => p.id === selectedPresetId) || EVENT_PRESETS[0];
 
   const selectedBySection = useMemo(() => {
     return WEDDING_MENU_SECTIONS.map((sec) => ({
@@ -233,7 +233,7 @@ export default function WeddingMenuCardSection({
           OFFICIAL TFC GARDEN WEDDING & PARTY CUSTOM MENU CARD
         </p>
         <h2 className="font-serif text-3xl sm:text-5xl text-[#14281D] font-normal leading-tight mb-3">
-          Party, Birthday, Arrange Marriage, Wedding & Ring Ceremony Card
+          Party & Wedding Booking Custom Menu Card
         </h2>
         <p className="text-sm sm:text-base text-[#54635A] max-w-3xl mb-5">
           Tick your preferred items directly on our official Wedding Hall Menu &

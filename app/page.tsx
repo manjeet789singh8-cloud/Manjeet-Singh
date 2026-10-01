@@ -16,6 +16,7 @@ import BookingAndSettingsModals, {
   ActiveBookingModalPayload,
 } from '@/components/BookingAndSettingsModals';
 import { SavedRecord } from '@/app/api/reservations/route';
+import { supabase, SUPABASE_SETUP_SQL } from '@/lib/supabase';
 import {
   Bell,
   MessageCircle,
@@ -87,6 +88,7 @@ export default function TfcGardenHomePage() {
   const [apptSaving, setApptSaving] = useState<boolean>(false);
   const [apptSuccessRecord, setApptSuccessRecord] =
     useState<SavedRecord | null>(null);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
 
   // 4 Signature Rooms filter state
   const [roomSearch, setRoomSearch] = useState<string>('');
@@ -95,18 +97,10 @@ export default function TfcGardenHomePage() {
   const [roomMinGuests, setRoomMinGuests] = useState<number>(1);
   const [availableNowOnly, setAvailableNowOnly] = useState<boolean>(false);
 
-  // Eco-Bamboo Sanctuary filter & climate state
+  // Eco-Bamboo Sanctuary filter state
   const [bambooSearch, setBambooSearch] = useState<string>('');
   const [bambooCategoryFilter, setBambooCategoryFilter] =
     useState<string>('All Categories');
-  const [bambooClimateFilter, setBambooClimateFilter] =
-    useState<string>('All Climate Modes');
-  const [bambooRoomClimateChoice, setBambooRoomClimateChoice] = useState<
-    Record<string, 'AC Eco-Cooling' | 'Non-AC Natural Breeze'>
-  >({
-    'room-bamboo': 'AC Eco-Cooling',
-    'room-hut': 'AC Eco-Cooling',
-  });
 
   // Packages filter state
   const [packageFilter, setPackageFilter] = useState<string>('All');
@@ -174,7 +168,7 @@ export default function TfcGardenHomePage() {
     return [filteredReviews[firstIdx], filteredReviews[secondIdx]];
   }, [filteredReviews, reviewPageIndex]);
 
-  // Appointment Form Submission
+  // Appointment Form Submission (Saves directly to Supabase backend)
   const handleAppointmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!apptName.trim() || !apptPhone.trim()) return;
@@ -194,14 +188,43 @@ export default function TfcGardenHomePage() {
           guests: apptGuests,
           amount: 0,
           paymentMethod: 'Pay at Resort / Concierge Desk',
-          paymentStatus: 'PENDING_PAYMENT',
+          paymentStatus: 'CONFIRMED',
           notes: apptNotes,
         }),
       });
       const data = await res.json();
       if (data.success && data.record) {
-        setApptSuccessRecord(data.record);
-        setSavedRecords((prev) => [data.record, ...prev]);
+        let finalRecord: SavedRecord = data.record;
+
+        // Client-side fallback insert if server-side didn't already sync
+        if (!data.supabaseSynced) {
+          const { error: clientInsertErr } = await supabase
+            .from('appointments')
+            .insert([
+              {
+                booking_code: finalRecord.bookingCode,
+                full_name: apptName,
+                phone: apptPhone,
+                email: apptEmail,
+                appointment_type: apptType,
+                preferred_date: apptDate,
+                preferred_time: apptTime,
+                guests_count: parseInt(apptGuests, 10) || 2,
+                special_requests: apptNotes,
+                status: 'CONFIRMED',
+              },
+            ]);
+          if (!clientInsertErr) {
+            finalRecord = {
+              ...finalRecord,
+              supabaseSynced: true,
+              supabaseTable: 'public.appointments',
+            };
+          }
+        }
+
+        setApptSuccessRecord(finalRecord);
+        setSavedRecords((prev) => [finalRecord, ...prev]);
         setApptName('');
         setApptPhone('');
         setApptNotes('');
@@ -346,12 +369,12 @@ export default function TfcGardenHomePage() {
         {/* Background Photo + Measured Contrast Scrim */}
         <div className="absolute inset-0 z-0">
           <img
-            src="/images/bamboo_hut_night.jpg"
+            src="/images/bamboo_hut_night.jpg?v=updated"
             alt="TFC Garden Handcrafted Bamboo Huts at Evening"
             referrerPolicy="no-referrer"
-            className="w-full h-full object-cover object-center"
+            className="w-full h-full object-cover object-center brightness-105 contrast-105 transition-all duration-500"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#0D211A]/85 via-[#0E241B]/65 to-[#0B1E16]/95" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#0D211A]/80 via-[#0E241B]/55 to-[#0B1E16]/90" />
         </div>
 
         <div className="relative z-10 max-w-6xl mx-auto">
@@ -564,9 +587,8 @@ export default function TfcGardenHomePage() {
             },
             {
               title: 'Party & Wedding Booking',
-              kicker: '5 Direct Booking Options',
-              footerText:
-                'Party, Birthday, Arrange Marriage, Wedding & Ring Ceremony',
+              kicker: 'Party & Grand Wedding Packages',
+              footerText: 'Party Booking & Grand Wedding Booking',
               image: '/images/wedding_stage_decor.jpg',
               href: '#wedding-card-section',
               icon: <Building2 className="w-4 h-4 text-[#D4A977]" />,
@@ -932,7 +954,9 @@ export default function TfcGardenHomePage() {
               </div>
               <div className="flex items-center gap-2 font-mono">
                 <Phone className="w-3.5 h-3.5 text-[#D4A977]" />
-                <span>{settings.whatsapp}</span>
+                <span>
+                  WhatsApp: {settings.whatsapp} • Landline: {settings.landline}
+                </span>
               </div>
               <div className="flex items-center gap-2 text-[#6EE7B7] font-medium">
                 <Clock className="w-3.5 h-3.5" />
@@ -944,24 +968,52 @@ export default function TfcGardenHomePage() {
           {/* White Form Body */}
           <form onSubmit={handleAppointmentSubmit} className="p-6 sm:p-8 space-y-4">
             {apptSuccessRecord && (
-              <div className="rounded-2xl bg-[#EFF7F2] border border-[#B7DFC5] p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-bold text-[#1E6B43]">
-                    ✓ Appointment Saved to Backend Database (ID:{' '}
-                    {apptSuccessRecord.bookingCode})
-                  </p>
-                  <p className="text-xs text-[#54635A]">
-                    {apptSuccessRecord.title} • {apptSuccessRecord.date} (
-                    {apptSuccessRecord.timeSlot})
-                  </p>
+              <div className="rounded-2xl bg-[#EFF7F2] border border-[#B7DFC5] p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-[#1E6B43]">
+                      ✓ Appointment Saved to Supabase Backend (ID:{' '}
+                      {apptSuccessRecord.bookingCode})
+                    </p>
+                    <p className="text-xs text-[#54635A] mt-0.5">
+                      {apptSuccessRecord.title} • {apptSuccessRecord.date} (
+                      {apptSuccessRecord.timeSlot})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setApptSuccessRecord(null)}
+                    className="text-xs font-semibold text-[#1E6B43] underline cursor-pointer shrink-0"
+                  >
+                    Dismiss
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setApptSuccessRecord(null)}
-                  className="text-xs font-semibold text-[#1E6B43] underline cursor-pointer"
-                >
-                  Dismiss
-                </button>
+
+                {!apptSuccessRecord.supabaseSynced && (
+                  <div className="rounded-xl bg-white/90 border border-[#DCD4C0] p-3 text-xs text-[#14281D] flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[#54635A]">
+                      First-time Supabase setup: Run the table creation SQL once
+                      in your Supabase SQL Editor (Project:{' '}
+                      <strong className="font-mono text-[#14281D]">
+                        nnoqydcdyoenfvnuvlhf
+                      </strong>
+                      ).
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(SUPABASE_SETUP_SQL);
+                        setCopiedSql(true);
+                        setTimeout(() => setCopiedSql(false), 2500);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-[#184A34] hover:bg-[#113625] text-white text-[11px] font-semibold cursor-pointer shrink-0"
+                    >
+                      {copiedSql
+                        ? '✓ SQL Copied to Clipboard'
+                        : 'Copy Supabase Table SQL'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1355,8 +1407,7 @@ export default function TfcGardenHomePage() {
           <p className="text-sm sm:text-base text-[#B8C7BE] max-w-2xl leading-relaxed mb-8">
             Crafted from sustainably harvested Guadua bamboo, our
             cathedral-ceiling cottages blend zero-carbon organic craftsmanship
-            with selectable whisper-quiet AC or natural botanical
-            cross-ventilation.
+            with whisper-quiet Eco-AC climate comfort.
           </p>
 
           {/* 4 Feature Boxes */}
@@ -1364,8 +1415,8 @@ export default function TfcGardenHomePage() {
             {[
               {
                 icon: <Wind className="w-4 h-4 text-[#D4A977]" />,
-                title: 'AC / Non-AC Options',
-                desc: 'Configurable climate or natural breeze louvers',
+                title: 'Full AC Eco-Cooling',
+                desc: 'Whisper-quiet split AC climate comfort',
               },
               {
                 icon: <Trees className="w-4 h-4 text-[#D4A977]" />,
@@ -1402,7 +1453,7 @@ export default function TfcGardenHomePage() {
           <div className="space-y-4 mb-12">
             <div className="relative h-64 sm:h-96 rounded-2xl overflow-hidden border border-[#264D3B]">
               <img
-                src="/images/bamboo_hut_night.jpg"
+                src="/images/bamboo_huts_evening_walkway.jpg?v=3"
                 alt="TFC Handcrafted Garden Bamboo Huts • Evening Walkway"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
@@ -1414,7 +1465,7 @@ export default function TfcGardenHomePage() {
 
             <div className="relative h-64 sm:h-96 rounded-2xl overflow-hidden border border-[#264D3B]">
               <img
-                src="/images/bamboo_room_interior.jpg"
+                src="/images/bamboo_room_interior.jpg?v=3"
                 alt="Cathedral Bamboo Interior"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
@@ -1433,7 +1484,7 @@ export default function TfcGardenHomePage() {
               </h3>
               <p className="text-xs text-[#9BB2A5]">
                 Search by bamboo sanctuary name, view, or amenities, and filter
-                by category or climate preference.
+                by category.
               </p>
             </div>
             <span className="font-mono text-xs text-[#9BB2A5]">
@@ -1449,7 +1500,7 @@ export default function TfcGardenHomePage() {
                 type="text"
                 value={bambooSearch}
                 onChange={(e) => setBambooSearch(e.target.value)}
-                placeholder="Search bamboo rooms & cottages by name, view, or feature (e.g., Riverfront, Hammock, Family, Non-AC)..."
+                placeholder="Search bamboo rooms & cottages by name, view, or feature (e.g., Garden View, Veranda, Heart Hut)..."
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0F241B] border border-[#29503D] text-xs sm:text-sm text-white placeholder-[#7B9687] focus:outline-none focus:border-[#D4A977]"
               />
             </div>
@@ -1486,41 +1537,12 @@ export default function TfcGardenHomePage() {
                   })}
                 </div>
               </div>
-
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#9BB2A5] mb-1.5">
-                  CLIMATE MODE
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {['All Climate Modes', 'AC Option', 'Non-AC Option'].map(
-                    (mode) => {
-                      const active = bambooClimateFilter === mode;
-                      return (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setBambooClimateFilter(mode)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                            active
-                              ? 'bg-white text-[#14281D]'
-                              : 'bg-[#183628] text-[#C6D6CD] border border-[#29503D]'
-                          }`}
-                        >
-                          {mode}
-                        </button>
-                      );
-                    }
-                  )}
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* 2 Configurable Bamboo Sanctuary Cards matching Screenshot 14 */}
+          {/* 2 Bamboo Sanctuary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {filteredBambooRooms.map((room) => {
-              const selectedClimate =
-                bambooRoomClimateChoice[room.id] || 'AC Eco-Cooling';
               return (
                 <div
                   key={room.id}
@@ -1568,7 +1590,7 @@ export default function TfcGardenHomePage() {
                         {room.description}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-[#DCE7E0] mb-3">
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-[#DCE7E0] mb-4">
                         <span className="flex items-center gap-1.5">
                           <Users className="w-3.5 h-3.5 text-[#D4A977]" />
                           <span>Up to {room.maxGuests} Guests</span>
@@ -1583,40 +1605,11 @@ export default function TfcGardenHomePage() {
                         </span>
                       </div>
 
-                      {/* Configure Climate Option */}
+                      {/* Climate Info */}
                       <div className="mb-4">
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#9BB2A5] mb-1.5">
-                          CONFIGURE CLIMATE OPTION:
-                        </p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {(
-                            [
-                              'AC Eco-Cooling',
-                              'Non-AC Natural Breeze',
-                            ] as const
-                          ).map((opt) => {
-                            const active = selectedClimate === opt;
-                            return (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() =>
-                                  setBambooRoomClimateChoice((prev) => ({
-                                    ...prev,
-                                    [room.id]: opt,
-                                  }))
-                                }
-                                className={`px-3 py-2 rounded-lg text-xs font-semibold border flex items-center justify-between transition-colors cursor-pointer ${
-                                  active
-                                    ? 'bg-[#204835] text-[#E8C587] border-[#D4A977]'
-                                    : 'bg-[#0F241B] text-[#9BB2A5] border-[#264D3B]'
-                                }`}
-                              >
-                                <span className="truncate">{opt}</span>
-                                {active && <Check className="w-3.5 h-3.5 shrink-0" />}
-                              </button>
-                            );
-                          })}
+                        <div className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-[#204835] text-[#E8C587] border border-[#D4A977] flex items-center justify-between">
+                          <span>AC Eco-Cooling Included</span>
+                          <Check className="w-3.5 h-3.5 shrink-0" />
                         </div>
                       </div>
 
@@ -1640,7 +1633,7 @@ export default function TfcGardenHomePage() {
                       onClick={() =>
                         setActiveBooking({
                           type: 'bamboo',
-                          title: `${room.name} (${selectedClimate})`,
+                          title: `${room.name} (AC Eco-Cooling)`,
                           subtitle: room.viewText,
                           amount: room.pricePerNight,
                           guests: '2 Guests',
@@ -1649,7 +1642,7 @@ export default function TfcGardenHomePage() {
                       className="w-full py-3 px-4 rounded-xl bg-[#D4A977] hover:bg-[#C69862] text-[#14281D] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4" />
-                      <span>Book Bamboo Sanctuary ({selectedClimate})</span>
+                      <span>Book Bamboo Sanctuary (AC Eco-Cooling)</span>
                     </button>
                   </div>
                 </div>
