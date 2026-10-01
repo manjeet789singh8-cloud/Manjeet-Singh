@@ -369,8 +369,8 @@ export default function TfcGardenHomePage() {
         {/* Background Photo + Measured Contrast Scrim */}
         <div className="absolute inset-0 z-0">
           <img
-            src="/images/bamboo_hut_night.jpg?v=updated"
-            alt="TFC Garden Handcrafted Bamboo Huts at Evening"
+            src="/images/tfc_hero_top_sanctuary.jpg?v=1"
+            alt="TFC Garden Luxury Resort Courtyard & Bamboo Sanctuary at Twilight"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover object-center brightness-105 contrast-105 transition-all duration-500"
           />
