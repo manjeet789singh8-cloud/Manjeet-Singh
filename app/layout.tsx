@@ -45,6 +45,12 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       lang="en"
       className={`${cormorant.variable} ${jakarta.variable} ${jetbrains.variable} scroll-smooth`}
     >
+      <head>
+        <script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          async
+        ></script>
+      </head>
       <body
         suppressHydrationWarning
         className="bg-[#F8F5EE] text-[#14281D] font-sans antialiased selection:bg-[#1E5E3A] selection:text-white"

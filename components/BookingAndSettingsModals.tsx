@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ResortSettings, GuestReview } from '@/lib/tfc-data';
 import { SavedRecord } from '@/app/api/reservations/route';
 import {
@@ -10,9 +10,7 @@ import {
   MessageCircle,
   Phone,
   Calendar,
-  Users,
   Sparkles,
-  User,
   Settings,
   Star,
   Copy,
@@ -24,7 +22,27 @@ import {
   Bed,
   Leaf,
   Gift,
+  AlertCircle,
 } from 'lucide-react';
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => {
+      open: () => void;
+      on: (
+        event: string,
+        callback: (response: {
+          error?: {
+            code?: string;
+            description?: string;
+            reason?: string;
+            metadata?: { order_id?: string; payment_id?: string };
+          };
+        }) => void
+      ) => void;
+    };
+  }
+}
 
 export interface ActiveBookingModalPayload {
   type:
@@ -63,6 +81,34 @@ interface BookingAndSettingsModalsProps {
   onCloseNavDrawer: () => void;
 }
 
+const RAZORPAY_METHOD_ID =
+  'Razorpay Standard Checkout (UPI / Card / NetBanking)';
+
+function ensureRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const existing = document.querySelector(
+      'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+    );
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      // Fallback check if already loaded
+      setTimeout(() => resolve(Boolean(window.Razorpay)), 600);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function BookingAndSettingsModals({
   settings,
   onUpdateSettings,
@@ -93,13 +139,25 @@ export default function BookingAndSettingsModals({
     String(activeBooking?.guests || '2 Guests')
   );
   const [paymentMethod, setPaymentMethod] = useState<string>(
-    activeBooking?.preferredMethod || `Direct UPI Transfer (${settings.upiId})`
+    activeBooking?.preferredMethod || RAZORPAY_METHOD_ID
   );
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [confirmedRecord, setConfirmedRecord] = useState<SavedRecord | null>(
     null
   );
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
+
+  // Sync modal defaults when activeBooking changes
+  useEffect(() => {
+    if (activeBooking) {
+      setPaymentError(null);
+      setConfirmedRecord(null);
+      setBookingDate(activeBooking.date || '2026-09-30');
+      setGuestsCount(String(activeBooking.guests || '2 Guests'));
+      setPaymentMethod(activeBooking.preferredMethod || RAZORPAY_METHOD_ID);
+    }
+  }, [activeBooking]);
 
   // Settings form state
   const [formSettings, setFormSettings] = useState<ResortSettings>(settings);
@@ -118,38 +176,199 @@ export default function BookingAndSettingsModals({
     setTimeout(() => setCopiedUpi(false), 2000);
   };
 
-  const handleConfirmBookingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveConfirmedReservation = async (
+    finalPaymentMethod: string,
+    finalStatus: 'CONFIRMED' | 'PENDING_PAYMENT' | 'FREE_RESERVATION',
+    paymentDetails?: Record<string, unknown>
+  ) => {
     if (!activeBooking) return;
+    const res = await fetch('/api/reservations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: activeBooking.type,
+        title: activeBooking.title,
+        customerName,
+        customerPhone,
+        customerEmail,
+        date: activeBooking.date || bookingDate,
+        timeSlot: activeBooking.timeSlot || 'Standard Check-In (12:00 PM)',
+        guests: activeBooking.guests || guestsCount,
+        amount: activeBooking.amount,
+        paymentMethod: finalPaymentMethod,
+        paymentStatus: finalStatus,
+        notes: activeBooking.notes || activeBooking.subtitle || '',
+        details: paymentDetails || {},
+      }),
+    });
+    const data = await res.json();
+    if (data.success && data.record) {
+      setConfirmedRecord(data.record);
+      onRecordSaved(data.record);
+    }
+  };
+
+  const handleRazorpayCheckout = async () => {
+    if (!activeBooking) return;
+    setPaymentError(null);
     setSubmitting(true);
+
     try {
-      const res = await fetch('/api/reservations', {
+      const scriptLoaded = await ensureRazorpayScript();
+      if (!scriptLoaded || !window.Razorpay) {
+        setPaymentError(
+          'Unable to load Razorpay Checkout SDK. Please check your internet connection and try again.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // Convert rupees to paise (minimum 100 paise)
+      const amountInPaise = Math.max(100, Math.round(activeBooking.amount * 100));
+
+      // STEP 1: Call backend POST /api/create-order
+      const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: activeBooking.type,
-          title: activeBooking.title,
-          customerName,
-          customerPhone,
-          customerEmail,
-          date: activeBooking.date || bookingDate,
-          timeSlot: activeBooking.timeSlot || 'Standard Check-In (12:00 PM)',
-          guests: activeBooking.guests || guestsCount,
-          amount: activeBooking.amount,
-          paymentMethod:
-            activeBooking.amount === 0
-              ? 'Free Table Reservation'
-              : paymentMethod,
-          paymentStatus:
-            activeBooking.amount === 0 ? 'FREE_RESERVATION' : 'CONFIRMED',
-          notes: activeBooking.notes || activeBooking.subtitle || '',
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt: `tfc_${activeBooking.type}_${Date.now()}`,
+          notes: {
+            service: activeBooking.title,
+            customerName,
+            customerPhone,
+          },
         }),
       });
-      const data = await res.json();
-      if (data.success && data.record) {
-        setConfirmedRecord(data.record);
-        onRecordSaved(data.record);
+
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.order_id) {
+        setPaymentError(
+          orderData.error || 'Failed to create Razorpay order on server.'
+        );
+        setSubmitting(false);
+        return;
       }
+
+      const keyId =
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || orderData.key_id;
+
+      // STEP 2: Open Razorpay Standard Checkout modal
+      const options: Record<string, unknown> = {
+        key: keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: settings.name,
+        description: activeBooking.title,
+        order_id: orderData.order_id,
+        prefill: {
+          name: customerName,
+          email: customerEmail,
+          contact: customerPhone,
+        },
+        notes: {
+          address: settings.address,
+          service: activeBooking.title,
+        },
+        theme: {
+          color: '#184A34',
+        },
+        modal: {
+          ondismiss: () => {
+            setSubmitting(false);
+            setPaymentError(
+              'Payment checkout was cancelled. Your booking has not been charged.'
+            );
+          },
+        },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            // STEP 3: Verify payment signature on backend POST /api/verify-payment
+            const verifyRes = await fetch('/api/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+
+            if (!verifyRes.ok || !verifyData.verified) {
+              setPaymentError(
+                verifyData.error ||
+                  'Payment signature verification failed. Booking was not marked as paid.'
+              );
+              setSubmitting(false);
+              return;
+            }
+
+            // Signature verified! Save confirmed record
+            await saveConfirmedReservation(
+              `Razorpay Verified (${response.razorpay_payment_id})`,
+              'CONFIRMED',
+              {
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+              }
+            );
+          } catch {
+            setPaymentError(
+              'Error verifying payment signature with server. Please contact concierge.'
+            );
+          } finally {
+            setSubmitting(false);
+          }
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response) => {
+        setSubmitting(false);
+        const errDesc =
+          response?.error?.description ||
+          response?.error?.reason ||
+          'Payment failed. Please try again or choose another payment method.';
+        setPaymentError(errDesc);
+      });
+
+      rzp.open();
+    } catch (err: unknown) {
+      setSubmitting(false);
+      setPaymentError(
+        err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred while starting Razorpay checkout.'
+      );
+    }
+  };
+
+  const handleConfirmBookingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeBooking) return;
+    setPaymentError(null);
+
+    // If paid booking and Razorpay Standard Checkout is selected, run Razorpay flow
+    if (activeBooking.amount > 0 && paymentMethod === RAZORPAY_METHOD_ID) {
+      await handleRazorpayCheckout();
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await saveConfirmedReservation(
+        activeBooking.amount === 0
+          ? 'Free Table Reservation'
+          : paymentMethod,
+        activeBooking.amount === 0 ? 'FREE_RESERVATION' : 'CONFIRMED'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -157,6 +376,7 @@ export default function BookingAndSettingsModals({
 
   const handleCloseBookingModal = () => {
     setConfirmedRecord(null);
+    setPaymentError(null);
     onCloseBooking();
   };
 
@@ -300,7 +520,20 @@ export default function BookingAndSettingsModals({
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleConfirmBookingSubmit} className="p-6 space-y-4">
+              <form
+                onSubmit={handleConfirmBookingSubmit}
+                className="p-6 space-y-4"
+              >
+                {paymentError && (
+                  <div className="rounded-xl bg-[#FDF2F0] border border-[#E6B0AA] p-3.5 flex items-start gap-2.5 text-xs text-[#922B21]">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#C0392B]" />
+                    <div className="flex-1">
+                      <p className="font-semibold">Payment Notice</p>
+                      <p className="mt-0.5 leading-relaxed">{paymentError}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
@@ -335,7 +568,7 @@ export default function BookingAndSettingsModals({
                     </label>
                     <input
                       type="date"
-                      value={activeBooking.date || bookingDate}
+                      value={bookingDate}
                       onChange={(e) => setBookingDate(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D]"
                     />
@@ -346,7 +579,7 @@ export default function BookingAndSettingsModals({
                     </label>
                     <input
                       type="text"
-                      value={activeBooking.guests || guestsCount}
+                      value={guestsCount}
                       onChange={(e) => setGuestsCount(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D]"
                     />
@@ -361,19 +594,25 @@ export default function BookingAndSettingsModals({
                     <div className="space-y-2">
                       {[
                         {
-                          id: `Direct UPI Transfer (${settings.upiId})`,
-                          icon: <Wallet className="w-4 h-4 text-[#1E6B43]" />,
-                          label: `Direct UPI ID: ${settings.upiId} (GPay, PhonePe, Paytm)`,
+                          id: RAZORPAY_METHOD_ID,
+                          icon: (
+                            <ShieldCheck className="w-4 h-4 text-[#2563EB]" />
+                          ),
+                          label:
+                            'Razorpay Secure Checkout (UPI, Cards, NetBanking)',
                         },
                         {
-                          id: 'Credit / Debit Card or NetBanking',
-                          icon: <CreditCard className="w-4 h-4 text-[#2563EB]" />,
-                          label: 'Credit / Debit Card or Bank Transfer',
+                          id: `Direct UPI Transfer (${settings.upiId})`,
+                          icon: <Wallet className="w-4 h-4 text-[#1E6B43]" />,
+                          label: `Direct UPI ID: ${settings.upiId}`,
                         },
                         {
                           id: 'Pay at Resort / Cash on Delivery',
-                          icon: <ShieldCheck className="w-4 h-4 text-[#9A6B3E]" />,
-                          label: 'Pay at TFC Garden Reception / Cash on Delivery',
+                          icon: (
+                            <CreditCard className="w-4 h-4 text-[#9A6B3E]" />
+                          ),
+                          label:
+                            'Pay at TFC Garden Reception / Cash on Delivery',
                         },
                       ].map((pm) => (
                         <label
@@ -424,7 +663,7 @@ export default function BookingAndSettingsModals({
                   </div>
                 )}
 
-                <div className="rounded-xl bg-[#0F261C] text-white p-4 flex items-center justify-between">
+                <div className="rounded-xl bg-[#0F261C] text-white p-4 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-[#A9C2B5]">
                       TOTAL PAYABLE AMOUNT
@@ -438,10 +677,13 @@ export default function BookingAndSettingsModals({
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-5 py-3 rounded-xl bg-[#D4A977] hover:bg-[#C69862] text-[#14281D] font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+                    className="px-5 py-3 rounded-xl bg-[#D4A977] hover:bg-[#C69862] disabled:opacity-60 text-[#14281D] font-bold text-xs sm:text-sm transition-colors cursor-pointer"
                   >
                     {submitting
-                      ? 'Confirming...'
+                      ? 'Processing...'
+                      : activeBooking.amount > 0 &&
+                        paymentMethod === RAZORPAY_METHOD_ID
+                      ? 'Pay with Razorpay'
                       : activeBooking.amount > 0
                       ? 'Pay & Confirm Booking'
                       : 'Confirm Free Reservation'}

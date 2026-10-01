@@ -1749,7 +1749,10 @@ export default function TfcGardenHomePage() {
             amount: payload.total,
             guests: 'Home Delivery',
             notes: payload.cookingNotes,
-            preferredMethod: `Direct UPI Transfer (${settings.upiId})`,
+            preferredMethod:
+              payload.preferredMethod === 'Razorpay'
+                ? 'Razorpay Standard Checkout (UPI / Card / NetBanking)'
+                : `Direct UPI Transfer (${settings.upiId})`,
           })
         }
       />

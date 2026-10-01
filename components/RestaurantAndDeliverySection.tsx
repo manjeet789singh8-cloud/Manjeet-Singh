@@ -41,7 +41,7 @@ interface RestaurantAndDeliverySectionProps {
     total: number;
     address: string;
     cookingNotes: string;
-    preferredMethod: 'UPI / Card / COD';
+    preferredMethod: 'Razorpay' | 'Other (UPI / Card / COD)';
   }) => void;
 }
 
@@ -935,7 +935,7 @@ export default function RestaurantAndDeliverySection({
               </div>
             </div>
 
-            {/* Checkout Action Buttons */}
+            {/* 3 Checkout Action Buttons */}
             <div className="space-y-2.5">
               <button
                 type="button"
@@ -949,16 +949,39 @@ export default function RestaurantAndDeliverySection({
                     total: totalPayable,
                     address: deliveryAddress,
                     cookingNotes,
-                    preferredMethod: 'UPI / Card / COD',
+                    preferredMethod: 'Razorpay',
+                  })
+                }
+                className="w-full py-3 px-5 rounded-xl bg-[#15325B] hover:bg-[#102646] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4 text-[#60A5FA]" />
+                <span>
+                  PAY WITH RAZORPAY (₹{totalPayable} •{' '}
+                  {deliveryFee === 0 ? 'FREE DELIVERY' : `₹${deliveryFee} DEL`}
+                  )
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={cartItemsDetailed.length === 0}
+                onClick={() =>
+                  onCheckoutDelivery({
+                    items: cartItemsDetailed,
+                    distanceLabel: selectedDistanceObj.label,
+                    deliveryFee,
+                    subtotal: foodSubtotal,
+                    total: totalPayable,
+                    address: deliveryAddress,
+                    cookingNotes,
+                    preferredMethod: 'Other (UPI / Card / COD)',
                   })
                 }
                 className="w-full py-3 px-5 rounded-xl bg-[#214E38] hover:bg-[#193C2B] disabled:opacity-50 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <Truck className="w-4 h-4 text-[#D4A977]" />
                 <span>
-                  Pay via UPI / Card / Cash on Delivery (₹{totalPayable} •{' '}
-                  {deliveryFee === 0 ? 'FREE DELIVERY' : `₹${deliveryFee} DEL`}
-                  )
+                  Other Payment Options (UPI / Card / Cash on Delivery)
                 </span>
               </button>
 
