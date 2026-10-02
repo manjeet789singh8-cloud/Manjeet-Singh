@@ -14,10 +14,10 @@ export const DEFAULT_SETTINGS: ResortSettings = {
   address: 'Near Bus Stand, Sri Anandpur Sahib, Punjab',
   whatsapp: '7379097909',
   landline: '01887260810',
-  email: 'tfcgardenresorts@gamil.com',
+  email: 'tfcgardenresorts@gmail.com',
   upiId: '7789060606@ptyes',
-  userName: 'Manjeet Singh',
-  userEmail: 'manjeet789singh8@gmail.com',
+  userName: '',
+  userEmail: '',
 };
 
 export interface PropertyTourItem {
@@ -58,11 +58,11 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
   },
   {
     id: 'tour-3',
-    title: 'TFC Family Restaurant & Indoor Dining Hall',
+    title: 'The Turban Kitchen Restaurant & Indoor Dining Hall',
     category: 'Restaurant & Dining',
     badgeText: 'RESTAURANT & DINING',
     description:
-      'Warm timber dining tables, ambient pendant lighting, and multi-cuisine family hospitality.',
+      'Warm timber dining tables, ambient pendant lighting, and multi-cuisine family hospitality at The Turban Kitchen Restaurant.',
     image: '/images/restaurant_vip_dining.jpg?v=3',
     targetSection: '#restaurant-section',
   },
@@ -118,13 +118,13 @@ export const PROPERTY_TOUR_ITEMS: PropertyTourItem[] = [
   },
   {
     id: 'tour-9',
-    title: 'TFC Resort Sanctuary & Lotus Water Pavilion',
-    category: 'Garden & Fun Zone',
-    badgeText: 'GARDEN & FUN ZONE',
+    title: 'The Turban Kitchen Restaurant & Courtyard Pavilion',
+    category: 'Restaurant & Dining',
+    badgeText: 'RESTAURANT & DINING',
     description:
-      'Signature TFC Garden architectural arrival courtyard framed by tropical greenery.',
+      'Signature The Turban Kitchen Restaurant arrival courtyard framed by tropical greenery.',
     image: '/images/bamboo_hut_night.jpg?v=3',
-    targetSection: '#bamboo-sanctuary-section',
+    targetSection: '#restaurant-section',
   },
   {
     id: 'tour-10',
@@ -144,7 +144,7 @@ export interface GuestReview {
     | 'Bamboo & Hut Stay'
     | 'Wedding & Celebration'
     | 'Family & AC Rooms'
-    | 'Restaurant & Food Delivery';
+    | 'Restaurant & Dining';
   badgeText: string;
   headline: string;
   quote: string;
@@ -160,7 +160,7 @@ export const GUEST_REVIEWS: GuestReview[] = [
     id: 'rev-1',
     category: 'Bamboo & Hut Stay',
     badgeText: 'BAMBOO & HUT STAY',
-    headline: '“The Heart Hut floral gateway and evening lantern ambiance are magical”',
+    headline: '“The Heart Hut floral gateway and evening lantern ambience are magical”',
     quote:
       'We drove up from Delhi for a weekend getaway near Virasat-e-Khalsa and booked the standalone Garden Hut Room. Walking through the Heart Hut archway onto the manicured lawn at sunset was breathtaking. Quiet, private, and thoughtfully designed.',
     author: 'Dr. Ananya Verma & Rohan Mehta',
@@ -171,13 +171,13 @@ export const GUEST_REVIEWS: GuestReview[] = [
   },
   {
     id: 'rev-2',
-    category: 'Restaurant & Food Delivery',
-    badgeText: 'RESTAURANT & FOOD DELIVERY',
+    category: 'Restaurant & Dining',
+    badgeText: 'RESTAURANT & DINING',
     headline: '“Zero table reservation charge and authentic Turban Kitchen flavors”',
     quote:
-      'Whether we reserve a VIP Table or Outdoor Garden Table for dinner with no table charge, or order The Turban Kitchen Dal Makhani and Deluxe Thali with free delivery within 3 km, the food quality and hospitality at TFC Garden are consistently top-notch.',
+      'Whenever we reserve a VIP Lounge Table or Outdoor Garden Table for family dinner with zero table charge, the Dal Makhani, Tandoori Platter, and warm hospitality at TFC Garden are consistently top-notch.',
     author: 'Maninder Singh & Friends',
-    subtitle: 'Sri Anandpur Sahib • VIP Lounge Table & 3 km Express Home Delivery',
+    subtitle: 'Sri Anandpur Sahib • VIP Lounge & Bamboo Dining Area',
     verificationCode: 'TFC-2026-9381',
     date: 'September 2026',
     rating: 5,
@@ -1389,7 +1389,7 @@ export const RESORT_PACKAGES: ResortPackage[] = [
     inclusions: [
       '2 Nights in Two-Bedroom Family Residence or Family Bamboo Villa',
       'Unlimited Access to TFC Garden Fun Zone & Outdoor Recreation Lawn',
-      'Reserved 6-Person Family Table in the TFC Family Restaurant Hall',
+      'Reserved 6-Person Family Table in The Turban Kitchen Restaurant',
       'Private Family Cinema & Bonfire Night Under the Stars',
       'Complimentary Extra Bed & Kids Meals',
     ],

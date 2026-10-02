@@ -14,9 +14,19 @@ export const supabaseKey =
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    persistSession: false,
+    persistSession: true,
+    autoRefreshToken: true,
   },
 });
+
+export interface AuthUserProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'guest' | 'admin';
+  supabaseAuthId?: string;
+}
 
 export interface AppointmentRowInsert {
   booking_code: string;

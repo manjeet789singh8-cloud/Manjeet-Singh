@@ -15,13 +15,26 @@ import RestaurantAndDeliverySection from '@/components/RestaurantAndDeliverySect
 import BookingAndSettingsModals, {
   ActiveBookingModalPayload,
 } from '@/components/BookingAndSettingsModals';
+import AuthModal from '@/components/AuthModal';
 import { SavedRecord } from '@/app/api/reservations/route';
-import { supabase, SUPABASE_SETUP_SQL } from '@/lib/supabase';
+import {
+  supabase,
+  SUPABASE_SETUP_SQL,
+  AuthUserProfile,
+} from '@/lib/supabase';
+import {
+  auth as firebaseAuth,
+  signOut as firebaseSignOut,
+  testConnection as testFirebaseConnection,
+  onAuthStateChanged,
+} from '@/lib/firebase';
 import {
   Bell,
   MessageCircle,
   User,
-  Settings as SettingsIcon,
+  UserPlus,
+  LogIn,
+  LogOut,
   Menu,
   Sparkles,
   MapPin,
@@ -114,6 +127,53 @@ export default function TfcGardenHomePage() {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
   const [isNavDrawerOpen, setIsNavDrawerOpen] = useState<boolean>(false);
 
+  // Login / Auth state
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('tfc_active_auth_user_v1');
+        if (saved) return JSON.parse(saved) as AuthUserProfile;
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'signup'>('login');
+
+  const applyAuthenticatedUser = (user: AuthUserProfile) => {
+    setAuthUser(user);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('tfc_active_auth_user_v1', JSON.stringify(user));
+      } catch {
+        // ignore storage errors
+      }
+    }
+    setSettings((prev) => ({
+      ...prev,
+      userName: user.name,
+      userEmail: user.email,
+    }));
+    setApptName((prev) => prev || user.name);
+    setApptPhone((prev) => prev || user.phone);
+    setApptEmail((prev) => prev || user.email);
+  };
+
+  const handleLogout = async () => {
+    await firebaseSignOut(firebaseAuth).catch(() => {});
+    await supabase.auth.signOut().catch(() => {});
+    setAuthUser(null);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('tfc_active_auth_user_v1');
+      } catch {
+        // ignore storage errors
+      }
+    }
+  };
+
   useEffect(() => {
     fetch('/api/reservations')
       .then((r) => r.json())
@@ -121,6 +181,54 @@ export default function TfcGardenHomePage() {
         if (data.records) setSavedRecords(data.records);
       })
       .catch(() => {});
+
+    // Test Firebase Firestore connection on initial boot
+    testFirebaseConnection();
+
+    // Listen to Firebase Auth state changes
+    const unsubscribeFirebase = onAuthStateChanged(
+      firebaseAuth,
+      (firebaseUser) => {
+        if (firebaseUser) {
+          applyAuthenticatedUser({
+            id: firebaseUser.uid,
+            name:
+              firebaseUser.displayName ||
+              firebaseUser.email?.split('@')[0] ||
+              'Guest',
+            email: firebaseUser.email || '',
+            phone: firebaseUser.phoneNumber || '',
+            role: 'guest',
+          });
+        }
+      }
+    );
+
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (data?.session?.user) {
+          const u = data.session.user;
+          const meta = u.user_metadata || {};
+          applyAuthenticatedUser({
+            id: u.id,
+            name:
+              meta.full_name ||
+              meta.name ||
+              u.email?.split('@')[0] ||
+              'Guest',
+            email: u.email || '',
+            phone: meta.phone || '',
+            role: 'guest',
+            supabaseAuthId: u.id,
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      unsubscribeFirebase();
+    };
   }, []);
 
   const handleHeroAvailabilitySubmit = (e: React.FormEvent) => {
@@ -136,10 +244,6 @@ export default function TfcGardenHomePage() {
     } else if (heroExperience === 'Restaurant Table Reservation') {
       document
         .getElementById('restaurant-section')
-        ?.scrollIntoView({ behavior: 'smooth' });
-    } else if (heroExperience === 'Home Delivery Order') {
-      document
-        .getElementById('delivery-menu-section')
         ?.scrollIntoView({ behavior: 'smooth' });
     } else {
       document
@@ -294,10 +398,10 @@ export default function TfcGardenHomePage() {
           <Bell className="w-3.5 h-3.5 text-[#D4A977] shrink-0" />
           <p className="truncate sm:whitespace-normal">
             <strong className="text-white font-semibold">
-              Free 3 km Home Delivery from The Turban Kitchen:
+              Welcome to {settings.name} ({settings.address}):
             </strong>{' '}
-            Enjoy zero delivery fee within 3 km of {settings.name} (
-            {settings.address}) on orders above ₹399.
+            Handcrafted Eco Bamboo Huts, Luxury AC Suites, Grand Wedding Banquet
+            Halls & Free Restaurant Table Reservations.
           </p>
         </div>
       </div>
@@ -334,23 +438,63 @@ export default function TfcGardenHomePage() {
               <span>WhatsApp: {settings.whatsapp}</span>
             </a>
 
-            <button
-              type="button"
-              onClick={() => setIsProfileOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-[#F3EFE4] text-[#14281D] border border-[#DCD4C0] text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <User className="w-3.5 h-3.5 text-[#68756D]" />
-              <span>{settings.userName}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-white hover:bg-[#F3EFE4] text-[#14281D] border border-[#DCD4C0] text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <SettingsIcon className="w-3.5 h-3.5 text-[#68756D]" />
-              <span className="hidden xs:inline">Settings</span>
-            </button>
+            {authUser ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg bg-[#0F261C] hover:bg-[#183B2B] text-[#E8C587] border border-[#D4A977]/40 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#34D399]" />
+                  <User className="w-3.5 h-3.5 text-[#D4A977]" />
+                  <span className="max-w-[100px] sm:max-w-[140px] truncate">
+                    {authUser.name}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  title="Sign Out"
+                  className="inline-flex items-center gap-1 px-2.5 py-2 rounded-lg bg-white hover:bg-red-50 text-[#8B2626] border border-[#DCD4C0] text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Logout</span>
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('login');
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg bg-[#D4A977] hover:bg-[#C69862] text-[#14281D] text-xs font-bold transition-colors whitespace-nowrap shadow-xs cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5 shrink-0" />
+                  <span>Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('signup');
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-lg bg-[#0F261C] hover:bg-[#183B2B] text-[#E8C587] border border-[#D4A977]/40 text-xs font-bold transition-colors whitespace-nowrap shadow-xs cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5 shrink-0 text-[#D4A977]" />
+                  <span>Sign Up</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen(true)}
+                  className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-[#F3EFE4] text-[#14281D] border border-[#DCD4C0] text-xs font-medium transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <User className="w-3.5 h-3.5 text-[#68756D]" />
+                  <span>My Bookings</span>
+                </button>
+              </>
+            )}
 
             <button
               type="button"
@@ -393,7 +537,8 @@ export default function TfcGardenHomePage() {
           <p className="text-sm sm:text-lg text-[#DCE7E0] max-w-2xl leading-relaxed mb-6">
             Experience {settings.name} in {settings.address} — featuring
             handcrafted bamboo garden huts, climate-crafted AC suites, grand
-            wedding banquet halls, family restaurant, and outdoor fun zone.
+            wedding banquet halls, The Turban Kitchen Restaurant, and outdoor
+            fun zone.
           </p>
 
           {/* Contact Info Strip */}
@@ -424,13 +569,6 @@ export default function TfcGardenHomePage() {
             >
               <Mail className="w-4 h-4 text-[#D4A977] shrink-0" />
               <span>{settings.email}</span>
-            </a>
-            <a
-              href="#delivery-menu-section"
-              className="flex items-center gap-1.5 text-[#6EE7B7] font-medium hover:underline"
-            >
-              <Utensils className="w-4 h-4 shrink-0" />
-              <span>Free Food Delivery (Within 3 km Area)</span>
             </a>
           </div>
 
@@ -478,9 +616,6 @@ export default function TfcGardenHomePage() {
                   </option>
                   <option value="Restaurant Table Reservation">
                     Restaurant Table Reservation
-                  </option>
-                  <option value="Home Delivery Order">
-                    Home Delivery Order (3 km Free)
                   </option>
                 </select>
               </div>
@@ -594,9 +729,9 @@ export default function TfcGardenHomePage() {
               icon: <Building2 className="w-4 h-4 text-[#D4A977]" />,
             },
             {
-              title: 'Restaurant & Free Delivery',
-              kicker: '3 km Free Delivery • 14 Tables',
-              footerText: '3 km Area Free Food Delivery & 6 Zones',
+              title: 'The Turban Kitchen Restaurant',
+              kicker: 'Zero Table Charge • 14 Tables',
+              footerText: 'Free Table Reservation Across 6 Dining Zones',
               image: '/images/restaurant_vip_dining.jpg',
               href: '#restaurant-section',
               icon: <Utensils className="w-4 h-4 text-[#D4A977]" />,
@@ -766,7 +901,7 @@ export default function TfcGardenHomePage() {
                 'Bamboo & Hut Stay',
                 'Wedding & Celebration',
                 'Family & AC Rooms',
-                'Restaurant & Food Delivery',
+                'Restaurant & Dining',
               ].map((tab) => {
                 const active = reviewFilter === tab;
                 return (
@@ -939,7 +1074,7 @@ export default function TfcGardenHomePage() {
               <span>INSTANT RESERVATION & VISIT DESK</span>
             </p>
             <h2 className="font-serif text-2xl sm:text-4xl text-white font-normal mb-2">
-              Book an Appointment or Resort Reservation
+              Book an Appointment or The Turban Kitchen Restaurant Reservation
             </h2>
             <p className="text-xs sm:text-sm text-[#B8C7BE] max-w-2xl mb-5">
               Schedule a wedding banquet walkthrough, reserve a bamboo cottage
@@ -1719,7 +1854,7 @@ export default function TfcGardenHomePage() {
         }
       />
 
-      {/* 11. RESTAURANT TABLE RESERVATION & HOME DELIVERY MENU CARD SECTION */}
+      {/* 11. RESTAURANT TABLE RESERVATION & SEATING ZONES SECTION */}
       <RestaurantAndDeliverySection
         settings={settings}
         onConfirmTable={(payload) =>
@@ -1732,20 +1867,6 @@ export default function TfcGardenHomePage() {
             timeSlot: payload.timeSlot,
             guests: payload.guests,
             notes: payload.chefRequests,
-          })
-        }
-        onCheckoutDelivery={(payload) =>
-          setActiveBooking({
-            type: 'delivery',
-            title: `The Turban Kitchen Home Delivery (${payload.items.length} Dishes)`,
-            subtitle: `${payload.distanceLabel} • Deliver to: ${payload.address}`,
-            amount: payload.total,
-            guests: 'Home Delivery',
-            notes: payload.cookingNotes,
-            preferredMethod:
-              payload.preferredMethod === 'Razorpay'
-                ? 'Razorpay Standard Checkout (UPI / Card / NetBanking)'
-                : `Direct UPI Transfer (${settings.upiId})`,
           })
         }
       />
@@ -1888,8 +2009,8 @@ export default function TfcGardenHomePage() {
             </h3>
             <p className="text-xs text-[#9EB5A8] leading-relaxed mb-4">
               An eco-luxury sanctuary in {settings.address} uniting handcrafted
-              Guadua bamboo huts, AC suites, grand wedding banquet halls, family
-              restaurant, and fun zone.
+              Guadua bamboo huts, AC suites, grand wedding banquet halls, The
+              Turban Kitchen Restaurant, and fun zone.
             </p>
             <div className="space-y-2 text-xs font-mono text-[#DCE7E0]">
               <div className="flex items-start gap-2 text-[#D4A977]">
@@ -1953,12 +2074,7 @@ export default function TfcGardenHomePage() {
               </li>
               <li>
                 <a href="#restaurant-section" className="hover:text-white">
-                  Restaurant Table Reservations
-                </a>
-              </li>
-              <li>
-                <a href="#delivery-menu-section" className="hover:text-white">
-                  Food Delivery (3 km Area Free Delivery)
+                  The Turban Kitchen Restaurant Reservations
                 </a>
               </li>
               <li>
@@ -1986,7 +2102,7 @@ export default function TfcGardenHomePage() {
                 </strong>
               </p>
               <p>
-                Home Delivery Landline:{' '}
+                The Turban Kitchen Restaurant Landline:{' '}
                 <strong className="font-mono text-white">
                   {settings.landline}
                 </strong>
@@ -2034,6 +2150,13 @@ export default function TfcGardenHomePage() {
       </a>
 
       {/* MODALS & DRAWERS */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={(user) => applyAuthenticatedUser(user)}
+        defaultTab={authModalTab}
+      />
+
       <BookingAndSettingsModals
         settings={settings}
         onUpdateSettings={(newSet) => setSettings(newSet)}
@@ -2050,6 +2173,16 @@ export default function TfcGardenHomePage() {
         onAddReview={(rev) => setReviews((prev) => [rev, ...prev])}
         isNavDrawerOpen={isNavDrawerOpen}
         onCloseNavDrawer={() => setIsNavDrawerOpen(false)}
+        authUser={authUser}
+        onOpenLoginModal={() => {
+          setAuthModalTab('login');
+          setIsAuthModalOpen(true);
+        }}
+        onOpenSignupModal={() => {
+          setAuthModalTab('signup');
+          setIsAuthModalOpen(true);
+        }}
+        onLogout={handleLogout}
       />
     </div>
   );

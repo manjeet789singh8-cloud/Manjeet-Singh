@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ResortSettings, GuestReview } from '@/lib/tfc-data';
 import { SavedRecord } from '@/app/api/reservations/route';
+import { AuthUserProfile } from '@/lib/supabase';
 import {
   X,
   CheckCircle2,
@@ -23,6 +24,10 @@ import {
   Leaf,
   Gift,
   AlertCircle,
+  LogIn,
+  LogOut,
+  User,
+  UserPlus,
 } from 'lucide-react';
 
 declare global {
@@ -79,6 +84,10 @@ interface BookingAndSettingsModalsProps {
   onAddReview: (rev: GuestReview) => void;
   isNavDrawerOpen: boolean;
   onCloseNavDrawer: () => void;
+  authUser: AuthUserProfile | null;
+  onOpenLoginModal: () => void;
+  onOpenSignupModal: () => void;
+  onLogout: () => void;
 }
 
 const RAZORPAY_METHOD_ID =
@@ -125,12 +134,20 @@ export default function BookingAndSettingsModals({
   onAddReview,
   isNavDrawerOpen,
   onCloseNavDrawer,
+  authUser,
+  onOpenLoginModal,
+  onOpenSignupModal,
+  onLogout,
 }: BookingAndSettingsModalsProps) {
   // Booking modal state
-  const [customerName, setCustomerName] = useState<string>(settings.userName);
-  const [customerPhone, setCustomerPhone] = useState<string>('9876543210');
+  const [customerName, setCustomerName] = useState<string>(
+    authUser?.name || ''
+  );
+  const [customerPhone, setCustomerPhone] = useState<string>(
+    authUser?.phone || ''
+  );
   const [customerEmail, setCustomerEmail] = useState<string>(
-    settings.userEmail
+    authUser?.email || ''
   );
   const [bookingDate, setBookingDate] = useState<string>(
     activeBooking?.date || '2026-09-30'
@@ -149,15 +166,22 @@ export default function BookingAndSettingsModals({
   const [copiedUpi, setCopiedUpi] = useState<boolean>(false);
 
   // Sync modal defaults when activeBooking changes
-  useEffect(() => {
+  const [prevBooking, setPrevBooking] = useState(activeBooking);
+  if (activeBooking !== prevBooking) {
+    setPrevBooking(activeBooking);
+    setPaymentError(null);
+    setConfirmedRecord(null);
     if (activeBooking) {
-      setPaymentError(null);
-      setConfirmedRecord(null);
       setBookingDate(activeBooking.date || '2026-09-30');
       setGuestsCount(String(activeBooking.guests || '2 Guests'));
       setPaymentMethod(activeBooking.preferredMethod || RAZORPAY_METHOD_ID);
+      if (authUser) {
+        setCustomerName(authUser.name);
+        setCustomerPhone(authUser.phone);
+        setCustomerEmail(authUser.email);
+      }
     }
-  }, [activeBooking]);
+  }
 
   // Settings form state
   const [formSettings, setFormSettings] = useState<ResortSettings>(settings);
@@ -167,7 +191,7 @@ export default function BookingAndSettingsModals({
     useState<GuestReview['category']>('Bamboo & Hut Stay');
   const [revHeadline, setRevHeadline] = useState<string>('');
   const [revQuote, setRevQuote] = useState<string>('');
-  const [revAuthor, setRevAuthor] = useState<string>(settings.userName);
+  const [revAuthor, setRevAuthor] = useState<string>(authUser?.name || '');
   const [revCity, setRevCity] = useState<string>('Sri Anandpur Sahib');
 
   const handleCopyUpi = () => {
@@ -607,12 +631,11 @@ export default function BookingAndSettingsModals({
                           label: `Direct UPI ID: ${settings.upiId}`,
                         },
                         {
-                          id: 'Pay at Resort / Cash on Delivery',
+                          id: 'Pay at Resort Reception',
                           icon: (
                             <CreditCard className="w-4 h-4 text-[#9A6B3E]" />
                           ),
-                          label:
-                            'Pay at TFC Garden Reception / Cash on Delivery',
+                          label: 'Pay at TFC Garden Reception',
                         },
                       ].map((pm) => (
                         <label
@@ -734,8 +757,8 @@ export default function BookingAndSettingsModals({
                     Wedding & Celebration
                   </option>
                   <option value="Family & AC Rooms">Family & AC Rooms</option>
-                  <option value="Restaurant & Food Delivery">
-                    Restaurant & Food Delivery
+                  <option value="Restaurant & Dining">
+                    Restaurant & Dining
                   </option>
                 </select>
               </div>
@@ -790,7 +813,7 @@ export default function BookingAndSettingsModals({
                   required
                   value={revQuote}
                   onChange={(e) => setRevQuote(e.target.value)}
-                  placeholder="Tell fellow guests about the bamboo huts, AC suites, wedding lawn, or food delivery..."
+                  placeholder="Tell fellow guests about the bamboo huts, AC suites, wedding lawn, or family restaurant..."
                   className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm"
                 />
               </div>
@@ -807,29 +830,86 @@ export default function BookingAndSettingsModals({
         </div>
       )}
 
-      {/* 3. USER PROFILE & MY BOOKINGS MODAL ("Manjeet Singh") */}
+      {/* 3. USER PROFILE & MY BOOKINGS MODAL */}
       {isProfileOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white text-[#14281D] rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-[#E5DEC9]">
-            <div className="bg-[#0F261C] text-white p-5 sm:p-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-full bg-[#D4A977] text-[#14281D] font-serif font-bold text-lg flex items-center justify-center">
-                  {settings.userName.charAt(0)}
+            <div className="bg-[#0F261C] text-white p-5 sm:p-6 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-full bg-[#D4A977] text-[#14281D] font-serif font-bold text-lg flex items-center justify-center shrink-0">
+                  {(authUser?.name || 'G').charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <h3 className="font-serif text-xl text-white">
-                    {settings.userName}
-                  </h3>
-                  <p className="text-xs text-[#A9C2B5]">{settings.userEmail}</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-serif text-xl text-white truncate">
+                      {authUser?.name || 'Guest Account'}
+                    </h3>
+                    {authUser ? (
+                      <span className="px-2 py-0.5 rounded-full bg-[#1E6B43] text-[#E8C587] text-[10px] font-bold uppercase tracking-wider">
+                        Logged In
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#A9C2B5] text-[10px] font-semibold uppercase tracking-wider">
+                        Not Logged In
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#A9C2B5] truncate">
+                    {authUser
+                      ? `${authUser.email}${
+                          authUser.phone ? ` • +91 ${authUser.phone}` : ''
+                        }`
+                      : 'Login or Sign Up to manage your bookings'}
+                  </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={onCloseProfile}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {authUser ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogout();
+                      onCloseProfile();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-400/30 text-red-200 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Logout</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCloseProfile();
+                        onOpenLoginModal();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#D4A977] hover:bg-[#C69862] text-[#14281D] text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Login</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onCloseProfile();
+                        onOpenSignupModal();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1E6B43] hover:bg-[#175435] text-white text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Sign Up</span>
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={onCloseProfile}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="p-5 sm:p-6 max-h-[70vh] overflow-y-auto space-y-3">
@@ -877,153 +957,6 @@ export default function BookingAndSettingsModals({
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. RESORT SETTINGS MODAL ("Settings") */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white text-[#14281D] rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-[#E5DEC9]">
-            <div className="bg-[#0F261C] text-white p-5 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Settings className="w-5 h-5 text-[#D4A977]" />
-                <div>
-                  <h3 className="font-serif text-xl text-white">
-                    TFC Garden Concierge & Property Settings
-                  </h3>
-                  <p className="text-xs text-[#A9C2B5]">
-                    Configure property contact details, WhatsApp hotline & UPI ID
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onCloseSettings}
-                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSettingsSubmit} className="p-5 space-y-3.5">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                  RESORT BRAND NAME
-                </label>
-                <input
-                  type="text"
-                  value={formSettings.name}
-                  onChange={(e) =>
-                    setFormSettings({ ...formSettings, name: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                  RESORT ADDRESS & LANDMARK
-                </label>
-                <input
-                  type="text"
-                  value={formSettings.address}
-                  onChange={(e) =>
-                    setFormSettings({
-                      ...formSettings,
-                      address: e.target.value,
-                    })
-                  }
-                  className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                    WHATSAPP / MOBILE
-                  </label>
-                  <input
-                    type="text"
-                    value={formSettings.whatsapp}
-                    onChange={(e) =>
-                      setFormSettings({
-                        ...formSettings,
-                        whatsapp: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                    LANDLINE NUMBER
-                  </label>
-                  <input
-                    type="text"
-                    value={formSettings.landline}
-                    onChange={(e) =>
-                      setFormSettings({
-                        ...formSettings,
-                        landline: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                    OFFICIAL EMAIL
-                  </label>
-                  <input
-                    type="email"
-                    value={formSettings.email}
-                    onChange={(e) =>
-                      setFormSettings({
-                        ...formSettings,
-                        email: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1">
-                    MERCHANT UPI ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formSettings.upiId}
-                    onChange={(e) =>
-                      setFormSettings({
-                        ...formSettings,
-                        upiId: e.target.value,
-                      })
-                    }
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onCloseSettings}
-                  className="px-4 py-2 rounded-xl border border-[#DCD4C0] text-xs font-semibold text-[#54635A] cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#184A34] hover:bg-[#113625] text-white text-xs font-semibold cursor-pointer"
-                >
-                  Save Property Settings
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -1099,11 +1032,6 @@ export default function BookingAndSettingsModals({
                     icon: <Utensils className="w-4 h-4 text-[#D4A977]" />,
                   },
                   {
-                    label: 'Home Delivery Menu (3 km Free)',
-                    href: '#delivery-menu-section',
-                    icon: <Utensils className="w-4 h-4 text-[#D4A977]" />,
-                  },
-                  {
                     label: 'All-Inclusive Resort Packages',
                     href: '#packages-section',
                     icon: <Gift className="w-4 h-4 text-[#D4A977]" />,
@@ -1123,6 +1051,56 @@ export default function BookingAndSettingsModals({
             </div>
 
             <div className="pt-4 border-t border-[#244736] space-y-2">
+              {authUser ? (
+                <div className="rounded-xl bg-[#163527] border border-[#285741] p-3 mb-2">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate">
+                        {authUser.name}
+                      </p>
+                      <p className="text-[10px] text-[#A9C2B5] truncate">
+                        {authUser.email}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogout();
+                      onCloseNavDrawer();
+                    }}
+                    className="w-full py-1.5 px-3 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out ({authUser.name.split(' ')[0]})</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCloseNavDrawer();
+                      onOpenLoginModal();
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-[#D4A977] hover:bg-[#C69862] text-[#14281D] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Login</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onCloseNavDrawer();
+                      onOpenSignupModal();
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-[#184A34] hover:bg-[#226347] border border-[#D4A977]/40 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <UserPlus className="w-3.5 h-3.5 text-[#D4A977]" />
+                    <span>Sign Up</span>
+                  </button>
+                </div>
+              )}
               <a
                 href={`https://wa.me/91${settings.whatsapp}`}
                 target="_blank"

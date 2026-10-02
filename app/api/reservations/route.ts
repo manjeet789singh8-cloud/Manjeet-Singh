@@ -29,24 +29,7 @@ export interface SavedRecord {
   createdAt: string;
 }
 
-const memoryStore: SavedRecord[] = [
-  {
-    id: 'init-1',
-    bookingCode: 'TFC-2026-9412',
-    type: 'bamboo',
-    title: 'TFC Eco Bamboo Room (AC Eco-Cooling)',
-    customerName: 'Manjeet Singh',
-    customerPhone: '7379097909',
-    customerEmail: 'manjeet789singh8@gmail.com',
-    date: '30/09/2026',
-    guests: 2,
-    amount: 3999,
-    paymentMethod: 'UPI Verified (7789060606@ptyes)',
-    paymentStatus: 'CONFIRMED',
-    notes: 'Evening lantern walk & complimentary morning breakfast included.',
-    createdAt: new Date().toISOString(),
-  },
-];
+const memoryStore: SavedRecord[] = [];
 
 export async function GET() {
   try {
