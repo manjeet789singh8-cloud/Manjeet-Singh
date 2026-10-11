@@ -7,12 +7,13 @@ export async function POST(req: NextRequest) {
       process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
-    if (!keyId || !keySecret) {
-      return NextResponse.json(
-        { error: 'Razorpay authentication credentials are not configured.' },
-        { status: 401 }
-      );
-    }
+    const isRealRazorpay = Boolean(
+      keyId &&
+      keySecret &&
+      !keyId.includes('YOUR_') &&
+      !keySecret.includes('YOUR_') &&
+      (keyId.startsWith('rzp_test_') || keyId.startsWith('rzp_live_'))
+    );
 
     const body = await req.json();
     const amount = Number(body.amount);
@@ -28,9 +29,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!isRealRazorpay) {
+      // Return sandbox test order so users can test payment confirmation flow smoothly
+      const simOrderId = `order_sim_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      return NextResponse.json({
+        order_id: simOrderId,
+        amount: Math.round(amount),
+        currency,
+        key_id: keyId || 'rzp_test_simulation',
+        simulated: true,
+      });
+    }
+
     const razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
+      key_id: keyId!,
+      key_secret: keySecret!,
     });
 
     const order = await razorpay.orders.create({

@@ -16,6 +16,7 @@ import {
 
 interface RestaurantAndDeliverySectionProps {
   settings: ResortSettings;
+  reservedTableIds?: string[];
   onConfirmTable: (payload: {
     table: RestaurantTable;
     date: string;
@@ -26,6 +27,7 @@ interface RestaurantAndDeliverySectionProps {
 }
 
 export default function RestaurantAndDeliverySection({
+  reservedTableIds = [],
   onConfirmTable,
 }: RestaurantAndDeliverySectionProps) {
   // Table reservation states
@@ -36,20 +38,37 @@ export default function RestaurantAndDeliverySection({
   const [seatingAreaFilter, setSeatingAreaFilter] = useState<string>('All');
   const [chefRequests, setChefRequests] = useState<string>('');
   const [selectedTableId, setSelectedTableId] = useState<string>('T-01');
-  const [tablesState, setTablesState] =
-    useState<RestaurantTable[]>(RESTAURANT_TABLES);
+  const [tablesState] = useState<RestaurantTable[]>(RESTAURANT_TABLES);
+
+  const tablesWithReservationState = useMemo(() => {
+    return tablesState.map((t) => {
+      const isReserved =
+        t.status === 'RESERVED' || reservedTableIds.includes(t.id);
+      return {
+        ...t,
+        status: (isReserved ? 'RESERVED' : 'AVAILABLE') as
+          | 'AVAILABLE'
+          | 'RESERVED',
+        reservedNote: isReserved
+          ? t.reservedNote || 'Reserved • Paid & Confirmed'
+          : undefined,
+      };
+    });
+  }, [tablesState, reservedTableIds]);
 
   const availableTablesCount = useMemo(
-    () => tablesState.filter((t) => t.status === 'AVAILABLE').length,
-    [tablesState]
+    () =>
+      tablesWithReservationState.filter((t) => t.status === 'AVAILABLE').length,
+    [tablesWithReservationState]
   );
   const reservedTablesCount = useMemo(
-    () => tablesState.filter((t) => t.status === 'RESERVED').length,
-    [tablesState]
+    () =>
+      tablesWithReservationState.filter((t) => t.status === 'RESERVED').length,
+    [tablesWithReservationState]
   );
 
   const filteredTables = useMemo(() => {
-    return tablesState.filter((t) => {
+    return tablesWithReservationState.filter((t) => {
       if (tableTypeFilter !== 'All' && t.type !== tableTypeFilter) {
         return false;
       }
@@ -58,28 +77,19 @@ export default function RestaurantAndDeliverySection({
       }
       return true;
     });
-  }, [tablesState, tableTypeFilter, seatingAreaFilter]);
+  }, [tablesWithReservationState, tableTypeFilter, seatingAreaFilter]);
 
   const selectedTable = useMemo(
     () =>
-      tablesState.find((t) => t.id === selectedTableId) || tablesState[0],
-    [tablesState, selectedTableId]
+      tablesWithReservationState.find((t) => t.id === selectedTableId) ||
+      tablesWithReservationState[0],
+    [tablesWithReservationState, selectedTableId]
   );
 
   const handleConfirmSelectedTable = (tableToBook: RestaurantTable) => {
     if (tableToBook.status === 'RESERVED') return;
     setSelectedTableId(tableToBook.id);
-    setTablesState((prev) =>
-      prev.map((t) =>
-        t.id === tableToBook.id
-          ? {
-              ...t,
-              status: 'RESERVED',
-              reservedNote: `Reserved for ${resTimeSlot}`,
-            }
-          : t
-      )
-    );
+    // Booking will be confirmed after payment in checkout modal
     onConfirmTable({
       table: tableToBook,
       date: resDate,
@@ -103,8 +113,12 @@ export default function RestaurantAndDeliverySection({
         </h2>
         <p className="text-sm sm:text-base text-[#54635A] max-w-3xl">
           Select your preferred dining date, time slot, table category, and
-          special culinary requests across our 6 distinct indoor, bamboo,
-          rooftop, and garden seating areas.
+          special culinary requests across our 5 exclusive tables: Table 1 (Couple),
+          Table 2 (Couple), Table 3 (Family), Table 4 (Family), and Table 5 (Meet Table).{' '}
+          <strong className="text-[#9A6B3E]">
+            Booking will be confirmed after payment
+          </strong>{' '}
+          (advance dining deposit is 100% adjustable against your food bill).
         </p>
       </div>
 
@@ -174,11 +188,10 @@ export default function RestaurantAndDeliverySection({
               onChange={(e) => setResGuests(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D] focus:outline-none focus:border-[#1E5E3A]"
             >
-              <option value="2 Guests">2 Guests</option>
-              <option value="4 Guests">4 Guests</option>
-              <option value="6 Guests">6 Guests</option>
-              <option value="8 Guests">8 Guests</option>
-              <option value="10+ VIP Group">10+ VIP Group</option>
+              <option value="2 Guests">2 Guests (Couple Table)</option>
+              <option value="4 Guests">4 Guests (Family Table)</option>
+              <option value="6 Guests">6 Guests (Family Table)</option>
+              <option value="8-10 Guests">8-10 Guests (Meet Table)</option>
             </select>
           </div>
 
@@ -191,11 +204,10 @@ export default function RestaurantAndDeliverySection({
               onChange={(e) => setTableTypeFilter(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D] focus:outline-none focus:border-[#1E5E3A]"
             >
-              <option value="All">All</option>
-              <option value="Couple Table">Couple Table</option>
-              <option value="Family Table">Family Table</option>
-              <option value="VIP Table">VIP Table</option>
-              <option value="Outdoor Table">Outdoor Table</option>
+              <option value="All">All Tables (5)</option>
+              <option value="Couple Table">Couple Table (Table 1, Table 2)</option>
+              <option value="Family Table">Family Table (Table 3, Table 4)</option>
+              <option value="Meet Table">Meet Table (Table 5)</option>
             </select>
           </div>
         </div>
@@ -209,13 +221,12 @@ export default function RestaurantAndDeliverySection({
             onChange={(e) => setSeatingAreaFilter(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D] focus:outline-none focus:border-[#1E5E3A]"
           >
-            <option value="All">All</option>
+            <option value="All">All Areas</option>
             <option value="Bamboo Dining Area">Bamboo Dining Area</option>
             <option value="Rooftop Seating">Rooftop Seating</option>
-            <option value="Indoor Seating Hall">Indoor Seating Hall</option>
             <option value="Family Seating Area">Family Seating Area</option>
+            <option value="Indoor Seating Hall">Indoor Seating Hall</option>
             <option value="VIP Lounge">VIP Lounge</option>
-            <option value="Garden Seating Area">Garden Seating Area</option>
           </select>
         </div>
 
@@ -227,7 +238,7 @@ export default function RestaurantAndDeliverySection({
             rows={2}
             value={chefRequests}
             onChange={(e) => setChefRequests(e.target.value)}
-            placeholder="e.g. Jain food, gluten-free, candlelit anniversary cake, kids platter..."
+            placeholder="e.g. Jain food, gluten-free, candlelit anniversary cake, kids platter, conference setup..."
             className="w-full px-3.5 py-2.5 rounded-xl border border-[#DCD4C0] bg-[#FAF8F3] text-xs sm:text-sm text-[#14281D] focus:outline-none focus:border-[#1E5E3A]"
           />
         </div>
@@ -236,16 +247,29 @@ export default function RestaurantAndDeliverySection({
         <div className="rounded-xl bg-[#F3EFE4] border border-[#E5DEC9] p-4">
           <div className="flex items-center justify-between mb-1">
             <span className="font-mono text-xs sm:text-sm font-bold text-[#14281D]">
-              Selected: Table {selectedTable.code}
+              Selected: {selectedTable.code}
             </span>
             <span className="text-xs font-semibold text-[#9A6B3E]">
               {selectedTable.type}
             </span>
           </div>
-          <p className="text-xs text-[#54635A] mb-3">
+          <p className="text-xs text-[#54635A] mb-2">
             Zone:{' '}
             <strong className="text-[#14281D]">{selectedTable.zone}</strong> •
-            Seats {selectedTable.maxGuests}
+            Seats {selectedTable.maxGuests} Guests
+          </p>
+          <div className="flex items-center justify-between py-2 border-t border-[#E5DEC9] mb-3 text-xs">
+            <span className="text-[#54635A]">Advance Dining Deposit:</span>
+            <span className="font-mono font-bold text-[#1E6B43]">
+              ₹{selectedTable.depositAmount.toLocaleString('en-IN')}{' '}
+              <span className="text-[10px] font-normal text-[#54635A]">
+                (Adjustable in bill)
+              </span>
+            </span>
+          </div>
+          <p className="text-[11px] text-[#9A6B3E] font-medium mb-3 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#9A6B3E]" />
+            <span>Booking will be confirmed after payment</span>
           </p>
           <button
             type="button"
@@ -254,34 +278,35 @@ export default function RestaurantAndDeliverySection({
             className={`w-full py-3 px-5 rounded-xl font-semibold text-xs sm:text-sm transition-colors cursor-pointer ${
               selectedTable.status === 'RESERVED'
                 ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                : 'bg-[#184A34] hover:bg-[#113625] text-white'
+                : 'bg-[#184A34] hover:bg-[#113625] text-white shadow-sm'
             }`}
           >
             {selectedTable.status === 'RESERVED'
-              ? `${selectedTable.code} is Currently Reserved`
-              : `Confirm Table ${selectedTable.code} (${selectedTable.type})`}
+              ? `${selectedTable.code} is Reserved & Confirmed`
+              : `Proceed to Pay ₹${selectedTable.depositAmount.toLocaleString('en-IN')} & Reserve ${selectedTable.code}`}
           </button>
         </div>
       </div>
 
-      {/* 2. Couple, Family, VIP & Outdoor Restaurant Tables (14 Tables) */}
+      {/* 2. Couple, Family & Meet Restaurant Tables (5 Tables) */}
       <div>
         <h3 className="font-serif text-xl sm:text-2xl text-[#14281D] font-normal mb-1">
-          2. Couple, Family, VIP & Outdoor Restaurant Tables (14 Tables)
+          2. The Turban Kitchen Dining Tables (5 Tables)
         </h3>
         <p className="text-xs font-semibold text-[#1E6B43] flex items-center gap-1.5 mb-4">
           <span className="w-2 h-2 rounded-full bg-[#1E6B43]" />
-          <span>Free Table Reservation (No Table Charge)</span>
+          <span>
+            Booking will be confirmed after payment • Advance deposit adjustable in final food bill
+          </span>
         </p>
 
         {/* Filter Tabs */}
         <div className="flex flex-wrap items-center gap-2 mb-6">
           {[
-            { label: 'All Tables', val: 'All' },
-            { label: 'Couple Tables', val: 'Couple Table' },
-            { label: 'Family Tables', val: 'Family Table' },
-            { label: 'VIP Tables', val: 'VIP Table' },
-            { label: 'Outdoor Tables', val: 'Outdoor Table' },
+            { label: 'All Tables (5)', val: 'All' },
+            { label: 'Couple Tables (2)', val: 'Couple Table' },
+            { label: 'Family Tables (2)', val: 'Family Table' },
+            { label: 'Meet Table (1)', val: 'Meet Table' },
           ].map((tab) => {
             const active = tableTypeFilter === tab.val;
             return (
@@ -301,7 +326,7 @@ export default function RestaurantAndDeliverySection({
           })}
         </div>
 
-        {/* 14 Tables Grid */}
+        {/* 5 Tables Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredTables.map((table) => {
             const isSelected =
@@ -385,35 +410,54 @@ export default function RestaurantAndDeliverySection({
                   ))}
                 </ul>
 
-                <div className="flex items-center justify-between pt-2">
-                  <span
-                    className={`text-xs font-semibold ${
-                      isSelected ? 'text-[#6EE7B7]' : 'text-[#1E6B43]'
-                    }`}
-                  >
-                    Up to {table.maxGuests} Guests • No Table Charge
-                  </span>
-
-                  {isReserved ? (
-                    <span className="font-mono text-xs font-semibold text-[#C84B31]">
-                      {table.reservedNote || 'Reserved for Dinner'}
+                <div className="pt-2 border-t border-[#F0ECE1] flex flex-col gap-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span
+                      className={
+                        isSelected ? 'text-[#B8C7BE]' : 'text-[#68756D]'
+                      }
+                    >
+                      Up to {table.maxGuests} Guests
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleConfirmSelectedTable(table);
-                      }}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-[#D4A977] hover:bg-[#C59760] text-[#14281D]'
-                          : 'bg-[#184A34] hover:bg-[#123827] text-white'
+                    <span
+                      className={`font-mono font-bold ${
+                        isSelected ? 'text-[#F2D29B]' : 'text-[#1E6B43]'
                       }`}
                     >
-                      Reserve {table.code}
-                    </button>
-                  )}
+                      Deposit: ₹{table.depositAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <p
+                    className={`text-[10px] italic ${
+                      isSelected ? 'text-[#A9C2B5]' : 'text-[#849E8F]'
+                    }`}
+                  >
+                    * Booking will be confirmed after payment
+                  </p>
+
+                  <div className="pt-1 flex items-center justify-end">
+                    {isReserved ? (
+                      <span className="font-mono text-xs font-semibold text-[#C84B31]">
+                        {table.reservedNote || 'Reserved • Paid & Confirmed'}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleConfirmSelectedTable(table);
+                        }}
+                        className={`w-full py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#D4A977] hover:bg-[#C59760] text-[#14281D]'
+                            : 'bg-[#184A34] hover:bg-[#123827] text-white'
+                        }`}
+                      >
+                        Pay ₹{table.depositAmount.toLocaleString('en-IN')} & Reserve {table.code}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );

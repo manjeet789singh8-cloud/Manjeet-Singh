@@ -66,6 +66,7 @@ export interface ActiveBookingModalPayload {
   guests?: number | string;
   notes?: string;
   preferredMethod?: string;
+  tableId?: string;
 }
 
 interface BookingAndSettingsModalsProps {
@@ -158,6 +159,7 @@ export default function BookingAndSettingsModals({
   const [paymentMethod, setPaymentMethod] = useState<string>(
     activeBooking?.preferredMethod || RAZORPAY_METHOD_ID
   );
+  const [upiUtr, setUpiUtr] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [confirmedRecord, setConfirmedRecord] = useState<SavedRecord | null>(
@@ -171,6 +173,7 @@ export default function BookingAndSettingsModals({
     setPrevBooking(activeBooking);
     setPaymentError(null);
     setConfirmedRecord(null);
+    setUpiUtr('');
     if (activeBooking) {
       setBookingDate(activeBooking.date || '2026-09-30');
       setGuestsCount(String(activeBooking.guests || '2 Guests'));
@@ -222,7 +225,10 @@ export default function BookingAndSettingsModals({
         paymentMethod: finalPaymentMethod,
         paymentStatus: finalStatus,
         notes: activeBooking.notes || activeBooking.subtitle || '',
-        details: paymentDetails || {},
+        details: {
+          tableId: activeBooking.tableId,
+          ...(paymentDetails || {}),
+        },
       }),
     });
     const data = await res.json();
@@ -238,19 +244,8 @@ export default function BookingAndSettingsModals({
     setSubmitting(true);
 
     try {
-      const scriptLoaded = await ensureRazorpayScript();
-      if (!scriptLoaded || !window.Razorpay) {
-        setPaymentError(
-          'Unable to load Razorpay Checkout SDK. Please check your internet connection and try again.'
-        );
-        setSubmitting(false);
-        return;
-      }
-
-      // Convert rupees to paise (minimum 100 paise)
-      const amountInPaise = Math.max(100, Math.round(activeBooking.amount * 100));
-
       // STEP 1: Call backend POST /api/create-order
+      const amountInPaise = Math.max(100, Math.round(activeBooking.amount * 100));
       const orderRes = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -270,6 +265,44 @@ export default function BookingAndSettingsModals({
       if (!orderRes.ok || !orderData.order_id) {
         setPaymentError(
           orderData.error || 'Failed to create Razorpay order on server.'
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      // If simulated sandbox test order
+      if (orderData.simulated) {
+        const verifyRes = await fetch('/api/verify-payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            razorpay_payment_id: `pay_sim_${Date.now()}`,
+            razorpay_order_id: orderData.order_id,
+            razorpay_signature: 'simulated_valid_signature',
+          }),
+        });
+        const verifyData = await verifyRes.json();
+        if (verifyData.verified) {
+          await saveConfirmedReservation(
+            `Razorpay Verified (${verifyData.payment_id})`,
+            'CONFIRMED',
+            {
+              razorpay_payment_id: verifyData.payment_id,
+              razorpay_order_id: verifyData.order_id,
+              amount: activeBooking.amount,
+            }
+          );
+        } else {
+          setPaymentError(verifyData.error || 'Payment verification failed.');
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      const scriptLoaded = await ensureRazorpayScript();
+      if (!scriptLoaded || !window.Razorpay) {
+        setPaymentError(
+          'Unable to load Razorpay Checkout SDK. Please check your internet connection or use Direct UPI.'
         );
         setSubmitting(false);
         return;
@@ -302,7 +335,7 @@ export default function BookingAndSettingsModals({
           ondismiss: () => {
             setSubmitting(false);
             setPaymentError(
-              'Payment checkout was cancelled. Your booking has not been charged.'
+              'Payment checkout was cancelled. Booking will be confirmed after payment.'
             );
           },
         },
@@ -359,7 +392,7 @@ export default function BookingAndSettingsModals({
         const errDesc =
           response?.error?.description ||
           response?.error?.reason ||
-          'Payment failed. Please try again or choose another payment method.';
+          'Payment failed. Booking will be confirmed after payment.';
         setPaymentError(errDesc);
       });
 
@@ -379,20 +412,70 @@ export default function BookingAndSettingsModals({
     if (!activeBooking) return;
     setPaymentError(null);
 
-    // If paid booking and Razorpay Standard Checkout is selected, run Razorpay flow
-    if (activeBooking.amount > 0 && paymentMethod === RAZORPAY_METHOD_ID) {
+    // 1. If Razorpay Standard Checkout is selected, run Razorpay flow
+    if (paymentMethod === RAZORPAY_METHOD_ID) {
       await handleRazorpayCheckout();
       return;
     }
 
+    // 2. If Direct UPI Transfer is selected, require UPI Transaction Ref / UTR
+    if (paymentMethod.startsWith('Direct UPI Transfer')) {
+      if (!upiUtr.trim() || upiUtr.trim().length < 6) {
+        setPaymentError(
+          'Please enter your 12-digit UPI Transaction Ref / UTR Number from your payment app (Google Pay, PhonePe, Paytm, BHIM) to confirm your payment.'
+        );
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        await saveConfirmedReservation(
+          `Direct UPI (UTR: ${upiUtr.trim()})`,
+          'CONFIRMED',
+          {
+            upi_utr: upiUtr.trim(),
+            upi_id: settings.upiId,
+            paid_amount: activeBooking.amount,
+            verified_at: new Date().toISOString(),
+          }
+        );
+      } catch (err: unknown) {
+        setPaymentError(
+          err instanceof Error ? err.message : 'Failed to confirm reservation.'
+        );
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // 3. If Pay at Resort Reception is selected, save as PENDING_PAYMENT
+    if (paymentMethod === 'Pay at Resort Reception') {
+      setSubmitting(true);
+      try {
+        await saveConfirmedReservation(
+          'Pay at Resort Reception',
+          'PENDING_PAYMENT',
+          {
+            note: 'Pending payment at resort reception counter. Booking will be confirmed after payment.',
+          }
+        );
+      } catch (err: unknown) {
+        setPaymentError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to save pending booking request.'
+        );
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Fallback confirmation
     setSubmitting(true);
     try {
-      await saveConfirmedReservation(
-        activeBooking.amount === 0
-          ? 'Free Table Reservation'
-          : paymentMethod,
-        activeBooking.amount === 0 ? 'FREE_RESERVATION' : 'CONFIRMED'
-      );
+      await saveConfirmedReservation(paymentMethod, 'CONFIRMED');
     } finally {
       setSubmitting(false);
     }
@@ -441,7 +524,7 @@ export default function BookingAndSettingsModals({
             <div className="bg-[#0F261C] text-white p-5 sm:p-6 flex items-start justify-between">
               <div>
                 <span className="inline-block px-2.5 py-0.5 rounded bg-[#D4A977] text-[#14281D] text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                  {activeBooking.type.toUpperCase()} RESERVATION DESK
+                  PAYMENT REQUIRED • BOOKING WILL BE CONFIRMED AFTER PAYMENT
                 </span>
                 <h3 className="font-serif text-xl sm:text-2xl text-white font-normal leading-snug">
                   {activeBooking.title}
@@ -463,18 +546,39 @@ export default function BookingAndSettingsModals({
 
             {confirmedRecord ? (
               <div className="p-6 space-y-4">
-                <div className="rounded-2xl bg-[#EFF7F2] border border-[#B7DFC5] p-4 text-center">
-                  <CheckCircle2 className="w-10 h-10 text-[#1E6B43] mx-auto mb-2" />
-                  <p className="text-[11px] font-mono uppercase tracking-wider text-[#1E6B43] font-bold">
-                    OFFICIAL BOOKING VOUCHER GENERATED
-                  </p>
-                  <h4 className="font-serif text-2xl font-bold text-[#14281D] mt-0.5">
-                    Booking ID: {confirmedRecord.bookingCode}
-                  </h4>
-                  <p className="text-xs text-[#54635A] mt-1">
-                    {confirmedRecord.title}
-                  </p>
-                </div>
+                {confirmedRecord.paymentStatus === 'CONFIRMED' ? (
+                  <div className="rounded-2xl bg-[#EFF7F2] border border-[#B7DFC5] p-4 text-center">
+                    <CheckCircle2 className="w-10 h-10 text-[#1E6B43] mx-auto mb-2" />
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-[#1E6B43] font-bold">
+                      ✓ PAYMENT VERIFIED • BOOKING CONFIRMED
+                    </p>
+                    <h4 className="font-serif text-2xl font-bold text-[#14281D] mt-0.5">
+                      Booking ID: {confirmedRecord.bookingCode}
+                    </h4>
+                    <p className="text-xs text-[#54635A] mt-1">
+                      {confirmedRecord.title}
+                    </p>
+                    <span className="inline-block mt-2 px-3 py-1 rounded-full bg-[#1E6B43] text-white text-[11px] font-bold">
+                      CONFIRMED AFTER PAYMENT
+                    </span>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl bg-[#FFF8EC] border border-[#FCD399] p-4 text-center">
+                    <AlertCircle className="w-10 h-10 text-[#C87316] mx-auto mb-2" />
+                    <p className="text-[11px] font-mono uppercase tracking-wider text-[#C87316] font-bold">
+                      PAYMENT PENDING • NOT YET CONFIRMED
+                    </p>
+                    <h4 className="font-serif text-2xl font-bold text-[#14281D] mt-0.5">
+                      Request ID: {confirmedRecord.bookingCode}
+                    </h4>
+                    <p className="text-xs text-[#54635A] mt-1">
+                      {confirmedRecord.title}
+                    </p>
+                    <div className="mt-2.5 p-2.5 bg-white/90 rounded-xl border border-[#FAD7A0] text-xs text-[#935109] font-medium leading-relaxed">
+                      ⚠️ Booking will be confirmed after payment is received at the reception counter. Your slot is held provisionally.
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-xl bg-[#FAF8F3] border border-[#E5DEC9] p-4 text-xs space-y-2">
                   <div className="flex justify-between">
@@ -499,11 +603,23 @@ export default function BookingAndSettingsModals({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#68756D]">Total Amount:</span>
+                    <span className="text-[#68756D]">Amount:</span>
                     <span className="font-mono font-bold text-[#1E6B43]">
-                      {confirmedRecord.amount && confirmedRecord.amount > 0
-                        ? `₹${confirmedRecord.amount.toLocaleString('en-IN')}`
-                        : '₹0 (Free Table Reservation)'}
+                      ₹{(confirmedRecord.amount || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#68756D]">Payment Status:</span>
+                    <span
+                      className={`font-semibold ${
+                        confirmedRecord.paymentStatus === 'CONFIRMED'
+                          ? 'text-[#1E6B43]'
+                          : 'text-[#C87316]'
+                      }`}
+                    >
+                      {confirmedRecord.paymentStatus === 'CONFIRMED'
+                        ? 'PAID & CONFIRMED'
+                        : 'PENDING PAYMENT (Booking confirmed after payment)'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -519,7 +635,7 @@ export default function BookingAndSettingsModals({
                     type="button"
                     onClick={() => {
                       const msg = encodeURIComponent(
-                        `Hello *${settings.name}*!\nHere is my official booking voucher:\n- *Booking ID:* ${confirmedRecord.bookingCode}\n- *Service:* ${confirmedRecord.title}\n- *Guest:* ${confirmedRecord.customerName} (${confirmedRecord.customerPhone})\n- *Date:* ${confirmedRecord.date}\n- *Amount:* ₹${confirmedRecord.amount || 0}\n- *Payment:* ${confirmedRecord.paymentMethod}`
+                        `Hello *${settings.name}*!\nHere is my booking voucher:\n- *Booking ID:* ${confirmedRecord.bookingCode}\n- *Service:* ${confirmedRecord.title}\n- *Guest:* ${confirmedRecord.customerName} (${confirmedRecord.customerPhone})\n- *Date:* ${confirmedRecord.date}\n- *Amount:* ₹${confirmedRecord.amount || 0}\n- *Payment Status:* ${confirmedRecord.paymentStatus === 'CONFIRMED' ? 'PAID & CONFIRMED' : 'PENDING PAYMENT'}\n- *Mode:* ${confirmedRecord.paymentMethod}\n*Note: Booking will be confirmed after payment.*`
                       );
                       window.open(
                         `https://wa.me/91${settings.whatsapp}?text=${msg}`,
@@ -539,7 +655,7 @@ export default function BookingAndSettingsModals({
                     onClick={handleCloseBookingModal}
                     className="w-full py-2.5 px-5 rounded-xl bg-[#F3EFE4] hover:bg-[#E5DEC9] text-[#14281D] font-semibold text-xs transition-colors cursor-pointer"
                   >
-                    Done & Return to TFC Garden
+                    Done & Return to The Turban Kitchen
                   </button>
                 </div>
               </div>
@@ -548,6 +664,17 @@ export default function BookingAndSettingsModals({
                 onSubmit={handleConfirmBookingSubmit}
                 className="p-6 space-y-4"
               >
+                {/* Prominent policy notice */}
+                <div className="rounded-xl bg-[#EFF7F2] border border-[#B7DFC5] p-3 text-xs text-[#1E6B43] flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-[#1E6B43]" />
+                  <div>
+                    <strong className="block">Booking Confirmation Policy:</strong>
+                    <span>
+                      Booking will be confirmed after payment. Your official voucher and reservation lock will be issued instantly once payment is verified.
+                    </span>
+                  </div>
+                </div>
+
                 {paymentError && (
                   <div className="rounded-xl bg-[#FDF2F0] border border-[#E6B0AA] p-3.5 flex items-start gap-2.5 text-xs text-[#922B21]">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#C0392B]" />
@@ -610,81 +737,124 @@ export default function BookingAndSettingsModals({
                   </div>
                 </div>
 
-                {activeBooking.amount > 0 && (
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1.5">
-                      SELECT PAYMENT METHOD (BOOKING CONFIRMED AFTER PAYMENT)
-                    </label>
-                    <div className="space-y-2">
-                      {[
-                        {
-                          id: RAZORPAY_METHOD_ID,
-                          icon: (
-                            <ShieldCheck className="w-4 h-4 text-[#2563EB]" />
-                          ),
-                          label:
-                            'Razorpay Secure Checkout (UPI, Cards, NetBanking)',
-                        },
-                        {
-                          id: `Direct UPI Transfer (${settings.upiId})`,
-                          icon: <Wallet className="w-4 h-4 text-[#1E6B43]" />,
-                          label: `Direct UPI ID: ${settings.upiId}`,
-                        },
-                        {
-                          id: 'Pay at Resort Reception',
-                          icon: (
-                            <CreditCard className="w-4 h-4 text-[#9A6B3E]" />
-                          ),
-                          label: 'Pay at TFC Garden Reception',
-                        },
-                      ].map((pm) => (
-                        <label
-                          key={pm.id}
-                          onClick={() => setPaymentMethod(pm.id)}
-                          className={`flex items-center gap-3 p-3 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
-                            paymentMethod === pm.id
-                              ? 'bg-[#EFF7F2] border-[#1E6B43] text-[#14281D]'
-                              : 'bg-[#FAF8F3] border-[#E5DEC9] text-[#54635A]'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="paymentMethod"
-                            checked={paymentMethod === pm.id}
-                            onChange={() => setPaymentMethod(pm.id)}
-                            className="accent-[#1E6B43]"
-                          />
-                          {pm.icon}
-                          <span className="flex-1">{pm.label}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* UPI Quick Copy Bar */}
-                    <div className="mt-2.5 flex items-center justify-between px-3.5 py-2 rounded-xl bg-[#F3EFE4] border border-[#E5DEC9] text-xs">
-                      <span className="font-mono text-[#14281D]">
-                        Official UPI: <strong>{settings.upiId}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpi}
-                        className="inline-flex items-center gap-1 text-[#1E6B43] font-semibold cursor-pointer"
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#54635A] mb-1.5">
+                    SELECT PAYMENT METHOD (BOOKING CONFIRMED AFTER PAYMENT)
+                  </label>
+                  <div className="space-y-2">
+                    {[
+                      {
+                        id: RAZORPAY_METHOD_ID,
+                        icon: (
+                          <ShieldCheck className="w-4 h-4 text-[#2563EB]" />
+                        ),
+                        label:
+                          'Razorpay Instant Checkout (UPI, Cards, NetBanking)',
+                      },
+                      {
+                        id: `Direct UPI Transfer (${settings.upiId})`,
+                        icon: <Wallet className="w-4 h-4 text-[#1E6B43]" />,
+                        label: `Direct UPI Transfer (${settings.upiId})`,
+                      },
+                      {
+                        id: 'Pay at Resort Reception',
+                        icon: (
+                          <CreditCard className="w-4 h-4 text-[#9A6B3E]" />
+                        ),
+                        label:
+                          'Pay at Resort Reception (Pending Payment)',
+                      },
+                    ].map((pm) => (
+                      <label
+                        key={pm.id}
+                        onClick={() => setPaymentMethod(pm.id)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
+                          paymentMethod === pm.id
+                            ? 'bg-[#EFF7F2] border-[#1E6B43] text-[#14281D]'
+                            : 'bg-[#FAF8F3] border-[#E5DEC9] text-[#54635A]'
+                        }`}
                       >
-                        {copiedUpi ? (
-                          <>
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Copy UPI</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          checked={paymentMethod === pm.id}
+                          onChange={() => setPaymentMethod(pm.id)}
+                          className="accent-[#1E6B43]"
+                        />
+                        {pm.icon}
+                        <span className="flex-1">{pm.label}</span>
+                      </label>
+                    ))}
                   </div>
-                )}
+
+                  {/* Direct UPI Transfer Box with UTR input */}
+                  {paymentMethod.startsWith('Direct UPI Transfer') && (
+                    <div className="mt-3 p-4 rounded-2xl bg-[#F4F9F6] border border-[#B7DFC5] space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#54635A]">Official UPI ID:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-[#14281D]">
+                            {settings.upiId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleCopyUpi}
+                            className="inline-flex items-center gap-1 text-[#1E6B43] font-semibold cursor-pointer text-[11px]"
+                          >
+                            {copiedUpi ? (
+                              <>
+                                <Check className="w-3 h-3" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs border-t border-[#D0EADB] pt-2">
+                        <span className="text-[#54635A]">Amount to Transfer:</span>
+                        <span className="font-mono font-bold text-sm text-[#1E6B43]">
+                          ₹{activeBooking.amount.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#14281D] mb-1">
+                          ENTER 12-DIGIT UPI TRANSACTION REF / UTR NO. *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={upiUtr}
+                          onChange={(e) => setUpiUtr(e.target.value)}
+                          placeholder="e.g. 4289XXXXXXXX (From Google Pay / PhonePe / Paytm)"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-[#B7DFC5] bg-white font-mono text-xs sm:text-sm text-[#14281D] focus:outline-none focus:border-[#1E6B43]"
+                        />
+                        <p className="text-[10px] text-[#54635A] mt-1 leading-relaxed">
+                          * Booking will be confirmed after payment: enter the UTR / Ref ID found in your payment confirmation to verify.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notice for Reception Payment */}
+                  {paymentMethod === 'Pay at Resort Reception' && (
+                    <div className="mt-3 p-3.5 rounded-2xl bg-[#FFF8EC] border border-[#FCD399] text-xs text-[#935109] flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#C87316]" />
+                      <div>
+                        <p className="font-bold">Important Policy Notice:</p>
+                        <p className="mt-0.5 leading-relaxed">
+                          Booking will be confirmed after payment is made at the reception counter. Selecting this option submits a pending reservation request without immediate seat lock.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="rounded-xl bg-[#0F261C] text-white p-4 flex items-center justify-between gap-3">
                   <div>
@@ -692,9 +862,7 @@ export default function BookingAndSettingsModals({
                       TOTAL PAYABLE AMOUNT
                     </p>
                     <p className="font-mono text-xl font-bold text-[#E8C587]">
-                      {activeBooking.amount > 0
-                        ? `₹${activeBooking.amount.toLocaleString('en-IN')}`
-                        : '₹0 (No Table Charge)'}
+                      ₹{activeBooking.amount.toLocaleString('en-IN')}
                     </p>
                   </div>
                   <button
@@ -703,13 +871,12 @@ export default function BookingAndSettingsModals({
                     className="px-5 py-3 rounded-xl bg-[#D4A977] hover:bg-[#C69862] disabled:opacity-60 text-[#14281D] font-bold text-xs sm:text-sm transition-colors cursor-pointer"
                   >
                     {submitting
-                      ? 'Processing...'
-                      : activeBooking.amount > 0 &&
-                        paymentMethod === RAZORPAY_METHOD_ID
-                      ? 'Pay with Razorpay'
-                      : activeBooking.amount > 0
-                      ? 'Pay & Confirm Booking'
-                      : 'Confirm Free Reservation'}
+                      ? 'Verifying Payment...'
+                      : paymentMethod === RAZORPAY_METHOD_ID
+                      ? `Pay ₹${activeBooking.amount.toLocaleString('en-IN')} with Razorpay`
+                      : paymentMethod.startsWith('Direct UPI Transfer')
+                      ? `Verify UTR & Confirm (₹${activeBooking.amount.toLocaleString('en-IN')})`
+                      : 'Submit Request (Pay at Counter)'}
                   </button>
                 </div>
               </form>

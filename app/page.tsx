@@ -122,6 +122,7 @@ export default function TfcGardenHomePage() {
   const [activeBooking, setActiveBooking] =
     useState<ActiveBookingModalPayload | null>(null);
   const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
+  const [reservedTableIds, setReservedTableIds] = useState<string[]>([]);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState<boolean>(false);
@@ -174,11 +175,46 @@ export default function TfcGardenHomePage() {
     }
   };
 
+  const handleRecordSaved = (rec: SavedRecord) => {
+    setSavedRecords((prev) => [rec, ...prev]);
+    if (rec.type === 'table' && rec.paymentStatus === 'CONFIRMED') {
+      let tId = rec.details?.tableId as string | undefined;
+      if (!tId) {
+        for (let i = 1; i <= 5; i++) {
+          if (rec.title.includes(`Table ${i}`)) {
+            tId = `T-0${i}`;
+            break;
+          }
+        }
+      }
+      if (tId) {
+        setReservedTableIds((prev) => Array.from(new Set([...prev, tId])));
+      }
+    }
+  };
+
   useEffect(() => {
     fetch('/api/reservations')
       .then((r) => r.json())
       .then((data) => {
-        if (data.records) setSavedRecords(data.records);
+        if (data.records) {
+          setSavedRecords(data.records);
+          const initialReserved = (data.records as SavedRecord[])
+            .filter((r) => r.type === 'table' && r.paymentStatus === 'CONFIRMED')
+            .map((r) => {
+              if (r.details?.tableId) return String(r.details.tableId);
+              for (let i = 1; i <= 5; i++) {
+                if (r.title.includes(`Table ${i}`)) return `T-0${i}`;
+              }
+              return '';
+            })
+            .filter(Boolean);
+          if (initialReserved.length > 0) {
+            setReservedTableIds((prev) =>
+              Array.from(new Set([...prev, ...initialReserved]))
+            );
+          }
+        }
       })
       .catch(() => {});
 
@@ -401,7 +437,7 @@ export default function TfcGardenHomePage() {
               Welcome to {settings.name} ({settings.address}):
             </strong>{' '}
             Handcrafted Eco Bamboo Huts, Luxury AC Suites, Grand Wedding Banquet
-            Halls & Free Restaurant Table Reservations.
+            Halls & The Turban Kitchen Restaurant Dining (Booking will be confirmed after payment).
           </p>
         </div>
       </div>
@@ -1857,12 +1893,14 @@ export default function TfcGardenHomePage() {
       {/* 11. RESTAURANT TABLE RESERVATION & SEATING ZONES SECTION */}
       <RestaurantAndDeliverySection
         settings={settings}
+        reservedTableIds={reservedTableIds}
         onConfirmTable={(payload) =>
           setActiveBooking({
             type: 'table',
+            tableId: payload.table.id,
             title: `Restaurant Table ${payload.table.code} (${payload.table.type})`,
-            subtitle: `Zone: ${payload.table.zone} • Free Table Reservation`,
-            amount: 0,
+            subtitle: `Zone: ${payload.table.zone} • Advance Dining Deposit: ₹${payload.table.depositAmount.toLocaleString('en-IN')}`,
+            amount: payload.table.depositAmount,
             date: payload.date,
             timeSlot: payload.timeSlot,
             guests: payload.guests,
@@ -2163,7 +2201,7 @@ export default function TfcGardenHomePage() {
         activeBooking={activeBooking}
         onCloseBooking={() => setActiveBooking(null)}
         savedRecords={savedRecords}
-        onRecordSaved={(rec) => setSavedRecords((prev) => [rec, ...prev])}
+        onRecordSaved={handleRecordSaved}
         isProfileOpen={isProfileOpen}
         onCloseProfile={() => setIsProfileOpen(false)}
         isSettingsOpen={isSettingsOpen}

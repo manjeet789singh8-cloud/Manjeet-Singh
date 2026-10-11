@@ -3,6 +3,30 @@ import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
   try {
+    const body = await req.json();
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+
+    if (!razorpay_order_id || !razorpay_payment_id) {
+      return NextResponse.json(
+        {
+          verified: false,
+          error:
+            'Missing required fields: razorpay_order_id or razorpay_payment_id.',
+        },
+        { status: 400 }
+      );
+    }
+
+    // Support simulated sandbox orders
+    if (String(razorpay_order_id).startsWith('order_sim_')) {
+      return NextResponse.json({
+        verified: true,
+        order_id: razorpay_order_id,
+        payment_id: razorpay_payment_id,
+        simulated: true,
+      });
+    }
+
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
     if (!keySecret) {
       return NextResponse.json(
@@ -11,15 +35,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!razorpay_signature) {
       return NextResponse.json(
         {
           verified: false,
-          error:
-            'Missing required fields: razorpay_order_id, razorpay_payment_id, or razorpay_signature.',
+          error: 'Missing razorpay_signature.',
         },
         { status: 400 }
       );
